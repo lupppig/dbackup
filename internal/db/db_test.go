@@ -3,6 +3,9 @@ package database
 import (
 	"context"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type MockAdapter struct {
@@ -28,23 +31,12 @@ func TestRegisterAndGetAdapter(t *testing.T) {
 	RegisterAdapter(adapter)
 
 	got, err := GetAdapter(name)
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	if got.Name() != name {
-		t.Errorf("expected %s, got %s", name, got.Name())
-	}
+	require.NoError(t, err)
+	assert.Equal(t, name, got.Name())
 }
 
 func TestGetUnsupportedAdapter(t *testing.T) {
 	_, err := GetAdapter("non_existent")
-	if err == nil {
-		t.Fatal("expected error for unsupported adapter, got nil")
-	}
-
-	expectedMsg := "unsupported database: non_existent"
-	if err.Error() != expectedMsg {
-		t.Errorf("expected error message %q, got %q", expectedMsg, err.Error())
-	}
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported database: non_existent")
 }

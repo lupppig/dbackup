@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/assert"
 )
 
 func executeCommand(root *cobra.Command, args ...string) (output string, err error) {
@@ -52,11 +53,11 @@ func TestBackupCommand_Flags(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// We need to re-initialize flags as they are global in backup.go
-			// but for this test we can just call Execute and check for validation errors
 			_, err := executeCommand(rootCmd, tt.args...)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("backup command error = %v, wantErr %v", err, tt.wantErr)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
 			}
 		})
 	}
