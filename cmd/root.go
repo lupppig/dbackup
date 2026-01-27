@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"context"
+
 	"github.com/spf13/cobra"
 )
 
@@ -24,6 +26,10 @@ var rootCmd = &cobra.Command{
 	dbackup backup postgres --db app_db --out ./backups
 	dbackup restore postgres --file backup.sql
 	dbackup version`,
+}
+
+func NewContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return nil, nil
 }
 
 func init() {
