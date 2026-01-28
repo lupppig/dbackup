@@ -12,7 +12,7 @@ run: build
 	./$(BIN)/$(COMPILED_FILE)
 
 test:
-	go test ./...
+	go test ./tests/...
 
 check-deps:
 	@which pg_dump > /dev/null || (echo "Error: pg_dump not found. Use 'make install-pg-client' to fix." && exit 1)

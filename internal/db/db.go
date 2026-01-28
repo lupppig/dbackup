@@ -1,17 +1,16 @@
-package database
+package db
 
 import (
 	"context"
 	"fmt"
-	"time"
+	"io"
 
-	"github.com/lupppig/dbackup/internal/backup"
 	"github.com/lupppig/dbackup/internal/logger"
 )
 
 type TLSConfig struct {
 	Enabled    bool
-	Mode       string // disable | require | verify-ca | verify-full
+	Mode       string
 	CACert     string
 	ClientCert string
 	ClientKey  string
@@ -32,15 +31,17 @@ type ConnectionParams struct {
 type BackUpOptions struct {
 	Storage    string
 	Compress   bool
-	FileName   string // file name string
-	BackupType string // incremental or differential
+	Algorithm  string
+	FileName   string
+	BackupType string
 	OutputDir  string
 }
+
 type DBAdapter interface {
 	Name() string
 	TestConnection(ctx context.Context, conn ConnectionParams) error
 	BuildConnection(ctx context.Context, conn ConnectionParams) (string, error)
-	RunBackup(ctx context.Context, connStr string, backupOptions BackUpOptions) error
+	RunBackup(ctx context.Context, connStr string, w io.Writer) error
 	SetLogger(l *logger.Logger)
 }
 
@@ -56,21 +57,4 @@ func GetAdapter(name string) (DBAdapter, error) {
 		return nil, fmt.Errorf("unsupported database: %s", name)
 	}
 	return adapter, nil
-}
-
-func buildWriter(opts BackUpOptions) (backup.BackupWriter, error) {
-	name := opts.FileName
-	if name == "" {
-		name = fmt.Sprintf("backup_%d.sql", time.Now().Unix())
-	}
-	fileWriter, err := backup.NewFileWriter(opts.OutputDir, name)
-	if err != nil {
-		return nil, err
-	}
-
-	if opts.Compress {
-		return backup.NewGzipWriter(fileWriter), nil
-	}
-
-	return fileWriter, nil
 }

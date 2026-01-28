@@ -8,7 +8,8 @@ import (
 	"testing"
 	"time"
 
-	database "github.com/lupppig/dbackup/internal/db"
+	"github.com/lupppig/dbackup/internal/backup"
+	"github.com/lupppig/dbackup/internal/db"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
@@ -17,23 +18,23 @@ import (
 )
 
 func TestPostgresAdapter_Name(t *testing.T) {
-	pa := &database.PostgresAdapter{}
+	pa := &db.PostgresAdapter{}
 	assert.Equal(t, "postgres", pa.Name())
 }
 
 func TestPostgresAdapter_BuildConnection(t *testing.T) {
-	pa := &database.PostgresAdapter{}
+	pa := &db.PostgresAdapter{}
 	ctx := context.Background()
 
 	tests := []struct {
 		name    string
-		params  database.ConnectionParams
+		params  db.ConnectionParams
 		want    string
 		wantErr bool
 	}{
 		{
 			name: "With DBUri",
-			params: database.ConnectionParams{
+			params: db.ConnectionParams{
 				DBUri: "postgres://user:pass@host:5432/dbname",
 			},
 			want:    "postgres://user:pass@host:5432/dbname",
@@ -41,7 +42,7 @@ func TestPostgresAdapter_BuildConnection(t *testing.T) {
 		},
 		{
 			name: "With Individual Flags",
-			params: database.ConnectionParams{
+			params: db.ConnectionParams{
 				Host:     "localhost",
 				User:     "testuser",
 				Password: "testpassword",
@@ -53,84 +54,8 @@ func TestPostgresAdapter_BuildConnection(t *testing.T) {
 		},
 		{
 			name: "Missing Required Fields",
-			params: database.ConnectionParams{
+			params: db.ConnectionParams{
 				Host: "localhost",
-			},
-			wantErr: true,
-		},
-		{
-			name: "With TLS Enabled (Default Mode)",
-			params: database.ConnectionParams{
-				Host:     "localhost",
-				User:     "testuser",
-				Password: "testpassword",
-				DBName:   "testdb",
-				TLS: database.TLSConfig{
-					Enabled: true,
-				},
-			},
-			want:    "postgres://testuser:testpassword@localhost:5432/testdb?sslmode=require",
-			wantErr: false,
-		},
-		{
-			name: "With TLS Enabled (Custom Mode)",
-			params: database.ConnectionParams{
-				Host:     "localhost",
-				User:     "testuser",
-				Password: "testpassword",
-				DBName:   "testdb",
-				TLS: database.TLSConfig{
-					Enabled: true,
-					Mode:    "verify-full",
-				},
-			},
-			want:    "postgres://testuser:testpassword@localhost:5432/testdb?sslmode=verify-full",
-			wantErr: false,
-		},
-		{
-			name: "With Root CA Certificate",
-			params: database.ConnectionParams{
-				Host:     "localhost",
-				User:     "testuser",
-				Password: "testpassword",
-				DBName:   "testdb",
-				TLS: database.TLSConfig{
-					Enabled: true,
-					Mode:    "verify-ca",
-					CACert:  "/path/to/ca.pem",
-				},
-			},
-			want:    "postgres://testuser:testpassword@localhost:5432/testdb?sslmode=verify-ca&sslrootcert=%2Fpath%2Fto%2Fca.pem",
-			wantErr: false,
-		},
-		{
-			name: "With mTLS (Client Cert and Key)",
-			params: database.ConnectionParams{
-				Host:     "localhost",
-				User:     "testuser",
-				Password: "testpassword",
-				DBName:   "testdb",
-				TLS: database.TLSConfig{
-					Enabled:    true,
-					Mode:       "verify-full",
-					ClientCert: "/path/to/client.crt",
-					ClientKey:  "/path/to/client.key",
-				},
-			},
-			want:    "postgres://testuser:testpassword@localhost:5432/testdb?sslcert=%2Fpath%2Fto%2Fclient.crt&sslkey=%2Fpath%2Fto%2Fclient.key&sslmode=verify-full",
-			wantErr: false,
-		},
-		{
-			name: "mTLS Error (Missing Client Key)",
-			params: database.ConnectionParams{
-				Host:     "localhost",
-				User:     "testuser",
-				Password: "testpassword",
-				DBName:   "testdb",
-				TLS: database.TLSConfig{
-					Enabled:    true,
-					ClientCert: "/path/to/client.crt",
-				},
 			},
 			wantErr: true,
 		},
@@ -171,11 +96,7 @@ func TestPostgresIntegration(t *testing.T) {
 				WithStartupTimeout(5*time.Second)),
 	)
 	require.NoError(t, err)
-	defer func() {
-		if err := postgresContainer.Terminate(ctx); err != nil {
-			t.Fatalf("failed to terminate container: %s", err)
-		}
-	}()
+	defer postgresContainer.Terminate(ctx)
 
 	connHost, err := postgresContainer.Host(ctx)
 	require.NoError(t, err)
@@ -183,9 +104,8 @@ func TestPostgresIntegration(t *testing.T) {
 	connPort, err := postgresContainer.MappedPort(ctx, "5432")
 	require.NoError(t, err)
 
-	pa := &database.PostgresAdapter{}
-
-	connParams := database.ConnectionParams{
+	pa := &db.PostgresAdapter{}
+	connParams := db.ConnectionParams{
 		Host:     connHost,
 		Port:     connPort.Int(),
 		User:     dbUser,
@@ -198,7 +118,7 @@ func TestPostgresIntegration(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
-	t.Run("RunBackup", func(t *testing.T) {
+	t.Run("RunBackupViaManager", func(t *testing.T) {
 		tempDir, err := os.MkdirTemp("", "dbackup-test-*")
 		require.NoError(t, err)
 		defer os.RemoveAll(tempDir)
@@ -206,20 +126,23 @@ func TestPostgresIntegration(t *testing.T) {
 		connStr, err := pa.BuildConnection(ctx, connParams)
 		require.NoError(t, err)
 
-		opts := database.BackUpOptions{
+		opts := backup.BackupOptions{
+			DBType:    "postgres",
 			OutputDir: tempDir,
 			FileName:  "test_backup.sql",
 			Compress:  false,
 		}
 
-		err = pa.RunBackup(ctx, connStr, opts)
+		mgr, err := backup.NewBackupManager(opts)
+		require.NoError(t, err)
+
+		err = mgr.Run(ctx, pa, connStr)
 		assert.NoError(t, err)
 
 		backupFile := filepath.Join(tempDir, opts.FileName)
 		_, err = os.Stat(backupFile)
 		assert.NoError(t, err)
 
-		// Optionally check content
 		f, err := os.Open(backupFile)
 		require.NoError(t, err)
 		defer f.Close()

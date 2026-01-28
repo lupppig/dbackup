@@ -1,12 +1,11 @@
-package database
+package db
 
 import (
 	"context"
 	"database/sql"
 	"fmt"
+	"io"
 	"os"
-	"path/filepath"
-	"time"
 
 	"github.com/lupppig/dbackup/internal/logger"
 	_ "github.com/mattn/go-sqlite3"
@@ -46,23 +45,8 @@ func (sq *SqliteAdapter) BuildConnection(_ context.Context, connParams Connectio
 	return connParams.DBUri, nil
 }
 
-func (sq *SqliteAdapter) RunBackup(ctx context.Context, connString string, backupOptions BackUpOptions) error {
+func (sq *SqliteAdapter) RunBackup(ctx context.Context, connString string, w io.Writer) error {
 	sq.Logger.Info("attempting to backup database...")
-	backupDir := backupOptions.OutputDir
-
-	if backupDir == "" {
-		backupDir = "./backup"
-	}
-
-	if err := os.MkdirAll(backupDir, os.ModePerm); err != nil {
-		return fmt.Errorf("failed to create backup directory: %w", err)
-	}
-	var backupPath string
-	if backupOptions.FileName == "" {
-		backupPath = filepath.Join(backupDir, fmt.Sprintf("backup_%d.db", time.Now().Unix()))
-	} else {
-		backupPath = filepath.Join(backupDir, fmt.Sprintf("%s_%d.db", backupOptions.FileName, time.Now().Unix()))
-	}
 
 	srcFile, err := os.Open(connString)
 	if err != nil {
@@ -71,24 +55,10 @@ func (sq *SqliteAdapter) RunBackup(ctx context.Context, connString string, backu
 	}
 	defer srcFile.Close()
 
-	dstFile, err := os.Create(backupPath)
-	if err != nil {
-		sq.Logger.Error("failed to create backup file", "error", err)
-		return fmt.Errorf("failed to create backup file: %w", err)
-	}
-	defer dstFile.Close()
-
-	if _, err := dstFile.ReadFrom(srcFile); err != nil {
-		sq.Logger.Error("failed to copy DB file", "error", err)
-		return fmt.Errorf("failed to copy DB file: %w", err)
+	if _, err := io.Copy(w, srcFile); err != nil {
+		sq.Logger.Error("failed to stream DB file", "error", err)
+		return fmt.Errorf("failed to stream DB file: %w", err)
 	}
 
-	// flush to disk...
-	if err := dstFile.Sync(); err != nil {
-		sq.Logger.Error("failed to flush backup file to disk", "error", err)
-		return fmt.Errorf("failed to flush backup file: %w", err)
-	}
-
-	sq.Logger.Info("SQLite full backup created", "path", backupPath)
 	return nil
 }

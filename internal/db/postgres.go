@@ -1,9 +1,10 @@
-package database
+package db
 
 import (
 	"context"
 	"database/sql"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"os/exec"
@@ -95,13 +96,7 @@ func (pa PostgresAdapter) BuildConnection(ctx context.Context, conn ConnectionPa
 	return u.String(), nil
 }
 
-func (pa PostgresAdapter) RunBackup(ctx context.Context, connStr string, backupOption BackUpOptions) error {
-	writer, err := buildWriter(backupOption)
-	if err != nil {
-		return err
-	}
-	defer writer.Close()
-
+func (pa PostgresAdapter) RunBackup(ctx context.Context, connStr string, w io.Writer) error {
 	if pa.logger != nil {
 		pa.logger.Info("Dumping database...", "engine", pa.Name())
 	}
@@ -115,7 +110,7 @@ func (pa PostgresAdapter) RunBackup(ctx context.Context, connStr string, backupO
 		"--no-acl",
 	)
 
-	cmd.Stdout = writer
+	cmd.Stdout = w
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lupppig/dbackup/internal/backup"
 	database "github.com/lupppig/dbackup/internal/db"
 	"github.com/lupppig/dbackup/internal/logger"
 	"github.com/spf13/cobra"
@@ -20,11 +21,12 @@ var (
 	port     int
 	dbURI    string
 
-	storage    string
-	output     string
-	compress   bool
-	fileName   string
-	backupType string
+	storage         string
+	output          string
+	compress        bool
+	compressionAlgo string
+	fileName        string
+	backupType      string
 
 	tlsEnabled    bool
 	tlsMode       string
@@ -93,10 +95,27 @@ process fails, dbackup exits with a non-zero status code.`,
 			},
 		}
 
+		mgr, err := backup.NewBackupManager(backup.BackupOptions{
+			DBType:     dbType,
+			DBName:     dbName,
+			Storage:    storage,
+			Compress:   compress,
+			Algorithm:  compressionAlgo,
+			FileName:   fileName,
+			BackupType: backupType,
+			OutputDir:  output,
+			Logger:     l,
+		})
+		if err != nil {
+			return err
+		}
+
 		var adapter database.DBAdapter
 		switch strings.ToLower(dbType) {
 		case "postgres":
 			adapter = &database.PostgresAdapter{}
+		case "sqlite":
+			adapter = &database.SqliteAdapter{}
 		default:
 			return fmt.Errorf("unsupported database type")
 		}
@@ -112,17 +131,6 @@ process fails, dbackup exits with a non-zero status code.`,
 			return err
 		}
 
-		backupOptions := database.BackUpOptions{
-			Compress:   compress,
-			OutputDir:  output,
-			Storage:    storage,
-			FileName:   fileName,
-			BackupType: backupType,
-		}
-
-		if dbType == "" {
-			dbType = "unknown"
-		}
 		if backupType == "" {
 			backupType = "full"
 		}
@@ -130,7 +138,7 @@ process fails, dbackup exits with a non-zero status code.`,
 		l.Info("Backup started", "engine", dbType, "database", dbName, "type", backupType)
 		start := time.Now()
 
-		if err := adapter.RunBackup(cmd.Context(), dsn, backupOptions); err != nil {
+		if err := mgr.Run(cmd.Context(), adapter, dsn); err != nil {
 			l.Error("Backup failed", "error", err)
 			return err
 		}
@@ -160,11 +168,11 @@ func init() {
 
 	backupCmd.Flags().StringVar(&storage, "storage", "", "remote storage target (if omitted, backup is stored locally)")
 	backupCmd.Flags().StringVar(&output, "out", "", "local output path for backup file (defaults to current directory)")
-	backupCmd.Flags().BoolVar(&compress, "compress", false, "compress backup output")
+	backupCmd.Flags().BoolVar(&compress, "compress", true, "compress backup output (default true)")
+	backupCmd.Flags().StringVar(&compressionAlgo, "compression-algo", "lz4", "compression algorithm (gzip, zstd, lz4, none, defaults to lz4). All are wrapped in a tar archive unless 'none' is specified.")
 	backupCmd.Flags().StringVar(&backupType, "backup-type", "", "either to perform differential or incremental backup if not provided default to... full backup")
 	backupCmd.Flags().StringVar(&fileName, "f", "", "custom backup file name")
 
-	// TLS flags
 	backupCmd.Flags().BoolVar(&tlsEnabled, "tls", false, "enable TLS/SSL for database connection")
 	backupCmd.Flags().StringVar(&tlsMode, "tls-mode", "disable", "TLS mode (disable, require, verify-ca, verify-full)")
 	backupCmd.Flags().StringVar(&tlsCACert, "tls-ca-cert", "", "path to CA certificate for TLS verification")

@@ -7,27 +7,28 @@ import (
 	"path/filepath"
 	"testing"
 
-	database "github.com/lupppig/dbackup/internal/db"
+	"github.com/lupppig/dbackup/internal/backup"
+	"github.com/lupppig/dbackup/internal/db"
 	"github.com/lupppig/dbackup/internal/logger"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSqliteAdapter_Name(t *testing.T) {
-	sa := &database.SqliteAdapter{}
+	sa := &db.SqliteAdapter{}
 	assert.Equal(t, "sqlite", sa.Name())
 }
 
 func TestSqliteAdapter_BuildConnection(t *testing.T) {
-	sa := &database.SqliteAdapter{}
+	sa := &db.SqliteAdapter{}
 	ctx := context.Background()
 
 	uri := "test.db"
-	got, err := sa.BuildConnection(ctx, database.ConnectionParams{DBUri: uri})
+	got, err := sa.BuildConnection(ctx, db.ConnectionParams{DBUri: uri})
 	assert.NoError(t, err)
 	assert.Equal(t, uri, got)
 
-	_, err = sa.BuildConnection(ctx, database.ConnectionParams{DBUri: ""})
+	_, err = sa.BuildConnection(ctx, db.ConnectionParams{DBUri: ""})
 	assert.Error(t, err)
 }
 
@@ -38,44 +39,42 @@ func TestSqliteIntegration(t *testing.T) {
 
 	dbPath := filepath.Join(tempDir, "source.db")
 
-	// Create and populate source DB
-	db, err := sql.Open("sqlite3", dbPath)
+	dbConn, err := sql.Open("sqlite3", dbPath)
 	require.NoError(t, err)
-	_, err = db.Exec("CREATE TABLE test (id INTEGER PRIMARY KEY, name TEXT)")
+	_, err = dbConn.Exec("CREATE TABLE test (id INTEGER PRIMARY KEY, name TEXT)")
 	require.NoError(t, err)
-	_, err = db.Exec("INSERT INTO test (name) VALUES ('testuser')")
+	_, err = dbConn.Exec("INSERT INTO test (name) VALUES ('testuser')")
 	require.NoError(t, err)
-	db.Close()
+	dbConn.Close()
 
 	l := logger.New(logger.Config{NoColor: true})
-	sa := &database.SqliteAdapter{Logger: l}
+	sa := &db.SqliteAdapter{Logger: l}
 	ctx := context.Background()
-	connParams := database.ConnectionParams{DBUri: dbPath}
+	connParams := db.ConnectionParams{DBUri: dbPath}
 
 	t.Run("TestConnection", func(t *testing.T) {
 		err := sa.TestConnection(ctx, connParams)
 		assert.NoError(t, err)
 	})
 
-	t.Run("RunBackup", func(t *testing.T) {
+	t.Run("RunBackupViaManager", func(t *testing.T) {
 		backupDir := filepath.Join(tempDir, "backups")
-		opts := database.BackUpOptions{
+		opts := backup.BackupOptions{
 			OutputDir: backupDir,
-			FileName:  "test_backup",
+			FileName:  "test_backup.db",
+			Compress:  false,
 		}
 
-		err := sa.RunBackup(ctx, dbPath, opts)
+		mgr, err := backup.NewBackupManager(opts)
+		require.NoError(t, err)
+
+		err = mgr.Run(ctx, sa, dbPath)
 		assert.NoError(t, err)
 
-		// Verify backup file exists (it appends timestamp according to current implementation)
-		files, err := os.ReadDir(backupDir)
-		require.NoError(t, err)
-		assert.Len(t, files, 1)
+		backupFile := filepath.Join(backupDir, opts.FileName)
+		_, err = os.Stat(backupFile)
+		assert.NoError(t, err)
 
-		backupFile := filepath.Join(backupDir, files[0].Name())
-		assert.Contains(t, backupFile, "test_backup")
-
-		// Verify content by opening it as a DB
 		copyDB, err := sql.Open("sqlite3", backupFile)
 		require.NoError(t, err)
 		defer copyDB.Close()
