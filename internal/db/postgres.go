@@ -5,16 +5,30 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
+	"os"
+	"os/exec"
 	"time"
+
+	_ "github.com/lib/pq"
+	"github.com/lupppig/dbackup/internal/logger"
 )
 
-type PostgresAdapter struct{}
+type PostgresAdapter struct {
+	logger *logger.Logger
+}
+
+func (pa *PostgresAdapter) SetLogger(l *logger.Logger) {
+	pa.logger = l
+}
 
 func (pa PostgresAdapter) Name() string {
 	return "postgres"
 }
 
-func (pa PostgresAdapter) TestConnection(ctx context.Context, conn ConnectionParams) error {
+func (pa *PostgresAdapter) TestConnection(ctx context.Context, conn ConnectionParams) error {
+	if pa.logger != nil {
+		pa.logger.Info("Testing database connection...", "host", conn.Host, "db", conn.DBName)
+	}
 	dsn, err := pa.BuildConnection(ctx, conn)
 	if err != nil {
 		return err
@@ -79,4 +93,33 @@ func (pa PostgresAdapter) BuildConnection(ctx context.Context, conn ConnectionPa
 
 	u.RawQuery = q.Encode()
 	return u.String(), nil
+}
+
+func (pa PostgresAdapter) RunBackup(ctx context.Context, connStr string, backupOption BackUpOptions) error {
+	writer, err := buildWriter(backupOption)
+	if err != nil {
+		return err
+	}
+	defer writer.Close()
+
+	if pa.logger != nil {
+		pa.logger.Info("Dumping database...", "engine", pa.Name())
+	}
+
+	cmd := exec.CommandContext(
+		ctx,
+		"pg_dump",
+		"--dbname", connStr,
+		"--format=plain",
+		"--no-owner",
+		"--no-acl",
+	)
+
+	cmd.Stdout = writer
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("pg_dump failed: %w", err)
+	}
+	return nil
 }

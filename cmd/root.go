@@ -21,6 +21,8 @@ var rootCmd = &cobra.Command{
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		return nil
 	},
+	SilenceUsage:  true,
+	SilenceErrors: true,
 	Example: `
 	dbackup backup mysql --db mydb
 	dbackup backup postgres --db app_db --out ./backups
@@ -32,9 +34,17 @@ func NewContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	return nil, nil
 }
 
+var (
+	LogJSON bool
+	NoColor bool
+)
+
 func init() {
 	rootCmd.Version = DBACKUP_VERSION
 	rootCmd.SetVersionTemplate("dbackup version {{ .Version }}\n")
+
+	rootCmd.PersistentFlags().BoolVar(&LogJSON, "log-json", false, "output logs in JSON format")
+	rootCmd.PersistentFlags().BoolVar(&NoColor, "no-color", false, "disable colored terminal output")
 }
 
 func Execute() error {

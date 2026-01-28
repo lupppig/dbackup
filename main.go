@@ -1,10 +1,10 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/lupppig/dbackup/cmd"
+	"github.com/lupppig/dbackup/internal/logger"
 )
 
 const (
@@ -25,6 +25,7 @@ func exitOnError(err error) {
 		return
 	}
 
-	fmt.Fprintf(os.Stderr, fmt.Sprintf("error exit on %v", err))
+	l := logger.New(logger.Config{})
+	l.Error("Command failed", "error", err)
 	os.Exit(EXIT_FAILURE)
 }

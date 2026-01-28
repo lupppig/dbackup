@@ -3,6 +3,10 @@ package database
 import (
 	"context"
 	"fmt"
+	"time"
+
+	"github.com/lupppig/dbackup/internal/backup"
+	"github.com/lupppig/dbackup/internal/logger"
 )
 
 type TLSConfig struct {
@@ -26,15 +30,18 @@ type ConnectionParams struct {
 }
 
 type BackUpOptions struct {
+	Storage    string
 	Compress   bool
-	Outputpath string
-	Format     string // sql tar or zip, custom etc...
+	FileName   string // file name string
 	BackupType string // incremental or differential
+	OutputDir  string
 }
 type DBAdapter interface {
 	Name() string
 	TestConnection(ctx context.Context, conn ConnectionParams) error
 	BuildConnection(ctx context.Context, conn ConnectionParams) (string, error)
+	RunBackup(ctx context.Context, connStr string, backupOptions BackUpOptions) error
+	SetLogger(l *logger.Logger)
 }
 
 var adapters = map[string]DBAdapter{}
@@ -49,4 +56,21 @@ func GetAdapter(name string) (DBAdapter, error) {
 		return nil, fmt.Errorf("unsupported database: %s", name)
 	}
 	return adapter, nil
+}
+
+func buildWriter(opts BackUpOptions) (backup.BackupWriter, error) {
+	name := opts.FileName
+	if name == "" {
+		name = fmt.Sprintf("backup_%d.sql", time.Now().Unix())
+	}
+	fileWriter, err := backup.NewFileWriter(opts.OutputDir, name)
+	if err != nil {
+		return nil, err
+	}
+
+	if opts.Compress {
+		return backup.NewGzipWriter(fileWriter), nil
+	}
+
+	return fileWriter, nil
 }

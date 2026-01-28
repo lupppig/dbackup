@@ -3,8 +3,10 @@ package cmd
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	database "github.com/lupppig/dbackup/internal/db"
+	"github.com/lupppig/dbackup/internal/logger"
 	"github.com/spf13/cobra"
 )
 
@@ -18,9 +20,11 @@ var (
 	port     int
 	dbURI    string
 
-	storage  string
-	output   string
-	compress bool
+	storage    string
+	output     string
+	compress   bool
+	fileName   string
+	backupType string
 
 	tlsEnabled    bool
 	tlsMode       string
@@ -37,7 +41,13 @@ var backupCmd = &cobra.Command{
 The backup command supports multiple database engines and allows you to configure
 output location, compression, and secure (TLS/SSL) connections. If the backup
 process fails, dbackup exits with a non-zero status code.`,
+	SilenceUsage:  true,
+	SilenceErrors: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		l := logger.New(logger.Config{
+			JSON:    LogJSON,
+			NoColor: NoColor,
+		})
 
 		if dbURI != "" {
 			if host != "" || user != "" || password != "" || dbName != "" {
@@ -83,23 +93,53 @@ process fails, dbackup exits with a non-zero status code.`,
 			},
 		}
 
-		// register adapter
 		var adapter database.DBAdapter
 		switch strings.ToLower(dbType) {
 		case "postgres":
-			adapter = database.PostgresAdapter{}
+			adapter = &database.PostgresAdapter{}
 		default:
 			return fmt.Errorf("unsupported database type")
 		}
+
+		adapter.SetLogger(l)
 
 		if err := adapter.TestConnection(cmd.Context(), connParams); err != nil {
 			return err
 		}
 
-		outputPath := output
-		if outputPath == "" && storage == "" {
-			outputPath = "./" // default directory
+		dsn, err := adapter.BuildConnection(cmd.Context(), connParams)
+		if err != nil {
+			return err
 		}
+
+		backupOptions := database.BackUpOptions{
+			Compress:   compress,
+			OutputDir:  output,
+			Storage:    storage,
+			FileName:   fileName,
+			BackupType: backupType,
+		}
+
+		if dbType == "" {
+			dbType = "unknown"
+		}
+		if backupType == "" {
+			backupType = "full"
+		}
+
+		l.Info("Backup started", "engine", dbType, "database", dbName, "type", backupType)
+		start := time.Now()
+
+		if err := adapter.RunBackup(cmd.Context(), dsn, backupOptions); err != nil {
+			l.Error("Backup failed", "error", err)
+			return err
+		}
+
+		l.Info("Backup finished",
+			"database", dbName,
+			"duration", time.Since(start).String(),
+		)
+
 		return nil
 	},
 }
@@ -121,6 +161,8 @@ func init() {
 	backupCmd.Flags().StringVar(&storage, "storage", "", "remote storage target (if omitted, backup is stored locally)")
 	backupCmd.Flags().StringVar(&output, "out", "", "local output path for backup file (defaults to current directory)")
 	backupCmd.Flags().BoolVar(&compress, "compress", false, "compress backup output")
+	backupCmd.Flags().StringVar(&backupType, "backup-type", "", "either to perform differential or incremental backup if not provided default to... full backup")
+	backupCmd.Flags().StringVar(&fileName, "f", "", "custom backup file name")
 
 	// TLS flags
 	backupCmd.Flags().BoolVar(&tlsEnabled, "tls", false, "enable TLS/SSL for database connection")
