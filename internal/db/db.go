@@ -26,6 +26,9 @@ type ConnectionParams struct {
 	DBUri    string
 
 	TLS TLSConfig
+
+	BackupType string // "full" or "incremental"
+	StateDir   string // Directory to share/store state between runs
 }
 
 type BackUpOptions struct {
@@ -41,7 +44,8 @@ type DBAdapter interface {
 	Name() string
 	TestConnection(ctx context.Context, conn ConnectionParams) error
 	BuildConnection(ctx context.Context, conn ConnectionParams) (string, error)
-	RunBackup(ctx context.Context, connStr string, w io.Writer) error
+	RunBackup(ctx context.Context, conn ConnectionParams, w io.Writer) error
+	RunRestore(ctx context.Context, conn ConnectionParams, r io.Reader) error
 	SetLogger(l *logger.Logger)
 }
 

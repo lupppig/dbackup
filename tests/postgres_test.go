@@ -2,7 +2,6 @@ package tests
 
 import (
 	"context"
-	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -13,7 +12,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
@@ -82,19 +80,26 @@ func TestPostgresIntegration(t *testing.T) {
 	ctx := context.Background()
 
 	dbName := "testdb"
-	dbUser := "user"
+	dbUser := "postgres"
 	dbPassword := "password"
 
-	postgresContainer, err := postgres.Run(ctx,
-		"postgres:16-alpine",
-		postgres.WithDatabase(dbName),
-		postgres.WithUsername(dbUser),
-		postgres.WithPassword(dbPassword),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
+	postgresContainer, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: testcontainers.ContainerRequest{
+			Image: "postgres:17-alpine",
+			Env: map[string]string{
+				"POSTGRES_DB":               dbName,
+				"POSTGRES_USER":             dbUser,
+				"POSTGRES_PASSWORD":         dbPassword,
+				"POSTGRES_HOST_AUTH_METHOD": "trust",
+			},
+			ExposedPorts: []string{"5432/tcp"},
+			Cmd:          []string{"postgres", "-c", "max_wal_senders=10", "-c", "max_replication_slots=10", "-c", "wal_level=replica"},
+			WaitingFor: wait.ForLog("database system is ready to accept connections").
 				WithOccurrence(2).
-				WithStartupTimeout(5*time.Second)),
-	)
+				WithStartupTimeout(30 * time.Second),
+		},
+		Started: true,
+	})
 	require.NoError(t, err)
 	defer postgresContainer.Terminate(ctx)
 
@@ -118,37 +123,80 @@ func TestPostgresIntegration(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
-	t.Run("RunBackupViaManager", func(t *testing.T) {
-		tempDir, err := os.MkdirTemp("", "dbackup-test-*")
+	t.Run("RunLogicalBackup", func(t *testing.T) {
+		tempDir, err := os.MkdirTemp("", "dbackup-logical-*")
 		require.NoError(t, err)
 		defer os.RemoveAll(tempDir)
 
-		connStr, err := pa.BuildConnection(ctx, connParams)
-		require.NoError(t, err)
-
 		opts := backup.BackupOptions{
-			DBType:    "postgres",
-			OutputDir: tempDir,
-			FileName:  "test_backup.sql",
-			Compress:  false,
+			DBType:     "postgres",
+			OutputDir:  tempDir,
+			FileName:   "test_logical.sql",
+			Compress:   false,
+			BackupType: "logical",
 		}
 
 		mgr, err := backup.NewBackupManager(opts)
 		require.NoError(t, err)
 
-		err = mgr.Run(ctx, pa, connStr)
+		err = mgr.Run(ctx, pa, connParams)
 		assert.NoError(t, err)
 
+		content, err := os.ReadFile(filepath.Join(tempDir, opts.FileName))
+		require.NoError(t, err)
+		assert.Contains(t, string(content), "PostgreSQL database dump")
+	})
+
+	t.Run("RunPhysicalBackupAndManifest", func(t *testing.T) {
+		tempDir, err := os.MkdirTemp("", "dbackup-physical-*")
+		require.NoError(t, err)
+		defer os.RemoveAll(tempDir)
+
+		stateDir := filepath.Join(tempDir, "state")
+		err = os.MkdirAll(stateDir, 0755)
+		require.NoError(t, err)
+
+		opts := backup.BackupOptions{
+			DBType:     "postgres",
+			OutputDir:  tempDir,
+			FileName:   "test_base.tar",
+			Compress:   false,
+			BackupType: "full",
+		}
+
+		mgr, err := backup.NewBackupManager(opts)
+		require.NoError(t, err)
+
+		// Create a specific connection param with StateDir
+		physicalConn := connParams
+		physicalConn.StateDir = stateDir
+
+		err = mgr.Run(ctx, pa, physicalConn)
+		assert.NoError(t, err)
+
+		// 1. Verify TAR file was created
 		backupFile := filepath.Join(tempDir, opts.FileName)
 		_, err = os.Stat(backupFile)
 		assert.NoError(t, err)
 
-		f, err := os.Open(backupFile)
-		require.NoError(t, err)
-		defer f.Close()
+		// 2. Verify backup_manifest was extracted to StateDir
+		manifestFile := filepath.Join(stateDir, "backup_manifest")
+		manifestContent, err := os.ReadFile(manifestFile)
+		assert.NoError(t, err)
+		assert.Contains(t, string(manifestContent), "PostgreSQL-Backup-Manifest-Version")
 
-		content, err := io.ReadAll(f)
+		// 3. Verify Incremental Backup (Auto-mode)
+		incrementalOpts := opts
+		incrementalOpts.FileName = "test_inc.tar"
+		incrementalOpts.BackupType = "auto"
+		mgrInc, err := backup.NewBackupManager(incrementalOpts)
 		require.NoError(t, err)
-		assert.Contains(t, string(content), "PostgreSQL database dump")
+
+		err = mgrInc.Run(ctx, pa, physicalConn)
+		assert.NoError(t, err)
+
+		incFile := filepath.Join(tempDir, "test_inc.tar")
+		_, err = os.Stat(incFile)
+		assert.NoError(t, err)
 	})
 }

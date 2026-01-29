@@ -68,7 +68,7 @@ func TestSqliteIntegration(t *testing.T) {
 		mgr, err := backup.NewBackupManager(opts)
 		require.NoError(t, err)
 
-		err = mgr.Run(ctx, sa, dbPath)
+		err = mgr.Run(ctx, sa, connParams)
 		assert.NoError(t, err)
 
 		backupFile := filepath.Join(backupDir, opts.FileName)
@@ -81,6 +81,34 @@ func TestSqliteIntegration(t *testing.T) {
 
 		var name string
 		err = copyDB.QueryRow("SELECT name FROM test WHERE id = 1").Scan(&name)
+		assert.NoError(t, err)
+		assert.Equal(t, "testuser", name)
+	})
+
+	t.Run("RunRestoreViaManager", func(t *testing.T) {
+		backupDir := filepath.Join(tempDir, "backups")
+		restorePath := filepath.Join(tempDir, "restored.db")
+		opts := backup.BackupOptions{
+			OutputDir: backupDir,
+			FileName:  "test_backup.db",
+			Compress:  false,
+			Logger:    l,
+		}
+
+		rmgr, err := backup.NewRestoreManager(opts)
+		require.NoError(t, err)
+
+		restoreConnParams := db.ConnectionParams{DBUri: restorePath}
+		err = rmgr.Run(ctx, sa, restoreConnParams)
+		assert.NoError(t, err)
+
+		// Verify restored content
+		restoredDB, err := sql.Open("sqlite3", restorePath)
+		require.NoError(t, err)
+		defer restoredDB.Close()
+
+		var name string
+		err = restoredDB.QueryRow("SELECT name FROM test WHERE id = 1").Scan(&name)
 		assert.NoError(t, err)
 		assert.Equal(t, "testuser", name)
 	})

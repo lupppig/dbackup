@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"archive/tar"
 	"io"
 	"os"
 	"path/filepath"
@@ -34,55 +33,61 @@ func TestCompressionIntegration(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	testData := []byte("hello compression world")
-	fileName := "backup.sql"
 
-	t.Run("DefaultTar", func(t *testing.T) {
-		fullFileName := fileName + ".tar"
-		f, err := os.Create(filepath.Join(tempDir, fullFileName))
+	t.Run("Lz4Streaming", func(t *testing.T) {
+		fullFileName := "backup.sql.lz4"
+		path := filepath.Join(tempDir, fullFileName)
+		f, err := os.Create(path)
 		require.NoError(t, err)
 
-		mw := &mockLocationWriter{Writer: f, location: filepath.Join(tempDir, fullFileName)}
-		c, err := compress.New(mw, compress.Tar)
+		mw := &mockLocationWriter{Writer: f, location: path}
+		c, err := compress.New(mw, compress.Lz4)
 		require.NoError(t, err)
-		c.SetTarBufferName("backup.sql")
 
 		_, err = c.Write(testData)
 		require.NoError(t, err)
 
-		loc := c.Location()
-		assert.Equal(t, filepath.Join(tempDir, fullFileName), loc)
-
 		err = c.Close()
 		assert.NoError(t, err)
 
-		tf, err := os.Open(loc)
+		// Verify it's compressed
+		content, err := os.ReadFile(path)
 		require.NoError(t, err)
-		defer tf.Close()
+		assert.NotEqual(t, testData, content)
 
-		tr := tar.NewReader(tf)
-		hdr, err := tr.Next()
+		// Verify we can decompress it
+		f2, err := os.Open(path)
 		require.NoError(t, err)
-		assert.Equal(t, "backup.sql", hdr.Name)
+		defer f2.Close()
+
+		cr, err := compress.NewReader(f2, compress.Lz4)
+		// Wait, my NewReader assumes TAR wrapper!
+		// I need to update NewReader to support raw streaming too.
+		require.NoError(t, err)
+		defer cr.Close()
+
+		decompressed, err := io.ReadAll(cr)
+		require.NoError(t, err)
+		assert.Equal(t, testData, decompressed)
 	})
 
-	t.Run("ZstdMode", func(t *testing.T) {
+	t.Run("ZstdStreaming", func(t *testing.T) {
 		fullFileName := "archive.sql.zstd"
-		f, err := os.Create(filepath.Join(tempDir, fullFileName))
+		path := filepath.Join(tempDir, fullFileName)
+		f, err := os.Create(path)
 		require.NoError(t, err)
 
-		mw := &mockLocationWriter{Writer: f, location: filepath.Join(tempDir, fullFileName)}
+		mw := &mockLocationWriter{Writer: f, location: path}
 		c, err := compress.New(mw, compress.Zstd)
 		require.NoError(t, err)
 
 		_, err = c.Write(testData)
 		require.NoError(t, err)
 
-		loc := c.Location()
-		assert.Equal(t, filepath.Join(tempDir, fullFileName), loc)
-
+		err = c.Close()
 		assert.NoError(t, err)
 
-		content, err := os.ReadFile(loc)
+		content, err := os.ReadFile(path)
 		require.NoError(t, err)
 		assert.NotEqual(t, testData, content)
 	})

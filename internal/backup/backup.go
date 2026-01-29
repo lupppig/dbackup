@@ -32,7 +32,14 @@ func NewBackupManager(opts BackupOptions) (*BackupManager, error) {
 	}, nil
 }
 
-func (m *BackupManager) Run(ctx context.Context, adapter database.DBAdapter, connStr string) error {
+func (m *BackupManager) Run(ctx context.Context, adapter database.DBAdapter, conn database.ConnectionParams) error {
+	if conn.BackupType == "" {
+		conn.BackupType = m.Options.BackupType
+	}
+	if conn.BackupType == "" {
+		conn.BackupType = "auto"
+	}
+
 	name := m.Options.FileName
 	if name == "" {
 		name = fmt.Sprintf("backup_%d.sql", time.Now().Unix())
@@ -45,9 +52,15 @@ func (m *BackupManager) Run(ctx context.Context, adapter database.DBAdapter, con
 
 	finalName := name
 	if m.Options.Compress && algo != compress.None {
-		ext := ".tar"
-		if !strings.HasSuffix(finalName, ext) {
-			finalName += ext
+		switch algo {
+		case compress.Gzip:
+			finalName += ".gz"
+		case compress.Lz4:
+			finalName += ".lz4"
+		case compress.Zstd:
+			finalName += ".zst"
+		case compress.Tar:
+			finalName += ".tar"
 		}
 	}
 
@@ -71,7 +84,7 @@ func (m *BackupManager) Run(ctx context.Context, adapter database.DBAdapter, con
 			w = c
 		}
 
-		if err := adapter.RunBackup(ctx, connStr, w); err != nil {
+		if err := adapter.RunBackup(ctx, conn, w); err != nil {
 			errChan <- err
 			return
 		}

@@ -41,3 +41,8 @@ func (s *LocalStorage) Save(ctx context.Context, name string, r io.Reader) (stri
 func (s *LocalStorage) Location() string {
 	return s.baseDir
 }
+
+func (s *LocalStorage) Open(ctx context.Context, name string) (io.ReadCloser, error) {
+	path := filepath.Join(s.baseDir, name)
+	return os.Open(path)
+}

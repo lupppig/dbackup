@@ -3,6 +3,7 @@ package compress
 import (
 	"archive/tar"
 	"compress/gzip"
+	"fmt"
 	"io"
 	"os"
 	"sync"
@@ -51,32 +52,30 @@ func New(w io.Writer, algo Algorithm) (*Compressor, error) {
 		return c, nil
 	}
 
-	c.Tar = tar.NewWriter(w)
-
-	tmp, err := os.CreateTemp("", "dbackup-comp-*")
-	if err != nil {
-		return nil, err
+	// For very large datasets, we avoid TAR and temp files unless explicitly requested.
+	// If the user wants a single compressed stream, they get it directly.
+	if algo == Tar {
+		c.Tar = tar.NewWriter(w)
+		return c, nil
 	}
-	c.tmpFile = tmp
 
+	// Direct streaming compression
 	switch algo {
 	case Gzip:
-		gz := gzip.NewWriter(tmp)
+		gz := gzip.NewWriter(w)
 		c.compWriter = gz
 		c.closer = gz
 	case Lz4:
-		l := lz4.NewWriter(tmp)
+		l := lz4.NewWriter(w)
 		c.compWriter = l
 		c.closer = l
 	case Zstd:
-		z, err := zstd.NewWriter(tmp)
+		z, err := zstd.NewWriter(w)
 		if err != nil {
 			return nil, err
 		}
 		c.compWriter = z
 		c.closer = z
-	case Tar:
-		c.compWriter = nil
 	default:
 		return nil, ErrUnsupportedAlgo(algo)
 	}
@@ -101,7 +100,12 @@ func (c *Compressor) Write(p []byte) (int, error) {
 	if c.compWriter != nil {
 		return c.compWriter.Write(p)
 	}
-	return c.tmpFile.Write(p)
+
+	if c.algo == Tar {
+		return 0, fmt.Errorf("direct streaming to TAR is not supported without a temp file (to calculate size); use a specific compression algorithm like LZ4 or Gzip for streaming")
+	}
+
+	return 0, fmt.Errorf("compressor not initialized for algorithm: %s", c.algo)
 }
 
 func (c *Compressor) Close() error {
@@ -121,46 +125,7 @@ func (c *Compressor) Close() error {
 		}
 	}
 
-	if c.Tar != nil && c.tmpFile != nil {
-		info, err := c.tmpFile.Stat()
-		if err != nil {
-			return err
-		}
-		size := info.Size()
-
-		if _, err := c.tmpFile.Seek(0, 0); err != nil {
-			return err
-		}
-
-		name := c.bufferName
-		if name == "" {
-			name = "backup.sql"
-		}
-		switch c.algo {
-		case Gzip:
-			name += ".gz"
-		case Lz4:
-			name += ".lz4"
-		case Zstd:
-			name += ".zst"
-		}
-
-		hdr := &tar.Header{
-			Name: name,
-			Size: size,
-			Mode: 0600,
-		}
-		if err := c.Tar.WriteHeader(hdr); err != nil {
-			return err
-		}
-		if _, err := io.Copy(c.Tar, c.tmpFile); err != nil {
-			return err
-		}
-
-		c.tmpFile.Close()
-		os.Remove(c.tmpFile.Name())
-		c.tmpFile = nil
-
+	if c.algo == Tar && c.Tar != nil {
 		if err := c.Tar.Close(); err != nil {
 			return err
 		}
@@ -175,6 +140,64 @@ func (c *Compressor) Close() error {
 
 func (c *Compressor) Location() string {
 	return c.location
+}
+
+type Decompressor struct {
+	io.Reader
+	closer io.Closer
+	tar    *tar.Reader
+}
+
+func NewReader(r io.Reader, algo Algorithm) (*Decompressor, error) {
+	if algo == "" || algo == None {
+		return &Decompressor{Reader: r}, nil
+	}
+
+	var decomp io.Reader
+	var closer io.Closer
+
+	// Important: Our New() now streams directly.
+	// If the user wants to decompress, we should wrap the reader 'r' directly.
+	switch algo {
+	case Gzip:
+		gz, err := gzip.NewReader(r)
+		if err != nil {
+			return nil, err
+		}
+		decomp = gz
+		closer = gz
+	case Lz4:
+		l := lz4.NewReader(r)
+		decomp = l
+	case Zstd:
+		z, err := zstd.NewReader(r)
+		if err != nil {
+			return nil, err
+		}
+		decomp = z
+		closer = z.IOReadCloser()
+	case Tar:
+		tr := tar.NewReader(r)
+		_, err := tr.Next()
+		if err != nil {
+			return nil, fmt.Errorf("failed to read tar header: %w", err)
+		}
+		decomp = tr
+	default:
+		return nil, ErrUnsupportedAlgo(algo)
+	}
+
+	return &Decompressor{
+		Reader: decomp,
+		closer: closer,
+	}, nil
+}
+
+func (d *Decompressor) Close() error {
+	if d.closer != nil {
+		return d.closer.Close()
+	}
+	return nil
 }
 
 type ErrUnsupportedAlgo Algorithm

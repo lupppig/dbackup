@@ -15,7 +15,7 @@ type SqliteAdapter struct {
 	Logger *logger.Logger
 }
 
-func (sq SqliteAdapter) Name() string {
+func (sq *SqliteAdapter) Name() string {
 	return "sqlite"
 }
 
@@ -45,19 +45,44 @@ func (sq *SqliteAdapter) BuildConnection(_ context.Context, connParams Connectio
 	return connParams.DBUri, nil
 }
 
-func (sq *SqliteAdapter) RunBackup(ctx context.Context, connString string, w io.Writer) error {
-	sq.Logger.Info("attempting to backup database...")
+func (sq *SqliteAdapter) RunBackup(ctx context.Context, conn ConnectionParams, w io.Writer) error {
+	if conn.BackupType == "" || conn.BackupType == "auto" {
+		conn.BackupType = "full"
+	}
 
-	srcFile, err := os.Open(connString)
+	if sq.Logger != nil {
+		sq.Logger.Info("Starting SQLite backup...", "path", conn.DBUri, "type", conn.BackupType)
+	}
+
+	srcFile, err := os.Open(conn.DBUri)
 	if err != nil {
-		sq.Logger.Error("failed to open source Database", "error", err)
 		return fmt.Errorf("failed to open source DB: %w", err)
 	}
 	defer srcFile.Close()
 
-	if _, err := io.Copy(w, srcFile); err != nil {
-		sq.Logger.Error("failed to stream DB file", "error", err)
+	written, err := io.Copy(w, srcFile)
+	if err != nil {
 		return fmt.Errorf("failed to stream DB file: %w", err)
+	}
+
+	if sq.Logger != nil {
+		sq.Logger.Debug("SQLite backup complete", "bytes", written)
+	}
+
+	return nil
+}
+
+func (sq *SqliteAdapter) RunRestore(ctx context.Context, conn ConnectionParams, r io.Reader) error {
+	sq.Logger.Info("restoring sqlite database...")
+
+	dstFile, err := os.Create(conn.DBUri)
+	if err != nil {
+		return fmt.Errorf("failed to create destination DB: %w", err)
+	}
+	defer dstFile.Close()
+
+	if _, err := io.Copy(dstFile, r); err != nil {
+		return fmt.Errorf("failed to write restored DB: %w", err)
 	}
 
 	return nil

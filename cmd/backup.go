@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -33,6 +35,8 @@ var (
 	tlsCACert     string
 	tlsClientCert string
 	tlsClientKey  string
+
+	stateDir string
 )
 
 var backupCmd = &cobra.Command{
@@ -78,6 +82,18 @@ process fails, dbackup exits with a non-zero status code.`,
 			return fmt.Errorf("--tls-client-key is required when --tls-client-cert is provided")
 		}
 
+		if stateDir == "" {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return fmt.Errorf("failed to get user home directory: %w", err)
+			}
+			stateDir = filepath.Join(home, ".dbackup")
+		}
+
+		if err := os.MkdirAll(stateDir, 0755); err != nil {
+			return fmt.Errorf("failed to create state directory: %w", err)
+		}
+
 		connParams := database.ConnectionParams{
 			DBtype:   dbType,
 			Host:     host,
@@ -93,6 +109,8 @@ process fails, dbackup exits with a non-zero status code.`,
 				ClientCert: tlsClientCert,
 				ClientKey:  tlsClientKey,
 			},
+			BackupType: backupType,
+			StateDir:   stateDir,
 		}
 
 		mgr, err := backup.NewBackupManager(backup.BackupOptions{
@@ -114,6 +132,8 @@ process fails, dbackup exits with a non-zero status code.`,
 		switch strings.ToLower(dbType) {
 		case "postgres":
 			adapter = &database.PostgresAdapter{}
+		case "mysql":
+			adapter = &database.MysqlAdapter{}
 		case "sqlite":
 			adapter = &database.SqliteAdapter{}
 		default:
@@ -126,11 +146,6 @@ process fails, dbackup exits with a non-zero status code.`,
 			return err
 		}
 
-		dsn, err := adapter.BuildConnection(cmd.Context(), connParams)
-		if err != nil {
-			return err
-		}
-
 		if backupType == "" {
 			backupType = "full"
 		}
@@ -138,7 +153,7 @@ process fails, dbackup exits with a non-zero status code.`,
 		l.Info("Backup started", "engine", dbType, "database", dbName, "type", backupType)
 		start := time.Now()
 
-		if err := mgr.Run(cmd.Context(), adapter, dsn); err != nil {
+		if err := mgr.Run(cmd.Context(), adapter, connParams); err != nil {
 			l.Error("Backup failed", "error", err)
 			return err
 		}
@@ -178,4 +193,6 @@ func init() {
 	backupCmd.Flags().StringVar(&tlsCACert, "tls-ca-cert", "", "path to CA certificate for TLS verification")
 	backupCmd.Flags().StringVar(&tlsClientCert, "tls-client-cert", "", "path to client certificate for mutual TLS (mTLS)")
 	backupCmd.Flags().StringVar(&tlsClientKey, "tls-client-key", "", "path to client private key for mutual TLS (mTLS)")
+
+	backupCmd.Flags().StringVar(&stateDir, "state-dir", "", "directory to store state for incremental backups")
 }

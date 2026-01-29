@@ -32,7 +32,11 @@ func (m MockAdapter) BuildConnection(ctx context.Context, conn db.ConnectionPara
 	return "", nil
 }
 
-func (m MockAdapter) RunBackup(ctx context.Context, connStr string, w io.Writer) error {
+func (m MockAdapter) RunBackup(ctx context.Context, conn db.ConnectionParams, w io.Writer) error {
+	return nil
+}
+
+func (m MockAdapter) RunRestore(ctx context.Context, conn db.ConnectionParams, r io.Reader) error {
 	return nil
 }
 
