@@ -81,8 +81,19 @@ func Scrub(uriStr string) string {
 	if err != nil {
 		return uriStr
 	}
-	if _, ok := u.User.Password(); ok {
-		u.User = url.UserPassword(u.User.Username(), "********")
+	if u.User != nil {
+		if _, ok := u.User.Password(); ok {
+			// Manually construct the string to avoid URL encoding of the mask
+			userStr := u.User.Username() + ":********"
+			if u.Host != "" {
+				userStr += "@" + u.Host
+			}
+			res := u.Scheme + "://" + userStr + u.Path
+			if u.RawQuery != "" {
+				res += "?" + u.RawQuery
+			}
+			return res
+		}
 	}
 	return u.String()
 }

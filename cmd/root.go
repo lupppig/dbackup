@@ -62,6 +62,9 @@ var (
 	target     string
 	remoteExec bool
 	dedupe     bool
+
+	SlackWebhook string
+	Concurrency  int
 )
 
 func init() {
@@ -70,8 +73,8 @@ func init() {
 
 	rootCmd.PersistentFlags().BoolVar(&LogJSON, "log-json", false, "output logs in JSON format")
 	rootCmd.PersistentFlags().BoolVar(&NoColor, "no-color", false, "disable colored terminal output")
-
-	// Register subcommands
+	rootCmd.PersistentFlags().StringVar(&SlackWebhook, "slack-webhook", "", "Slack Incoming Webhook URL for notifications")
+	rootCmd.PersistentFlags().IntVar(&Concurrency, "concurrency", 4, "Number of databases to back up/restore simultaneously")
 }
 
 func Execute() error {

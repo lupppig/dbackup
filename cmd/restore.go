@@ -5,9 +5,12 @@ import (
 	"strings"
 	"time"
 
+	"sync"
+
 	"github.com/lupppig/dbackup/internal/backup"
 	database "github.com/lupppig/dbackup/internal/db"
 	"github.com/lupppig/dbackup/internal/logger"
+	"github.com/lupppig/dbackup/internal/notify"
 	"github.com/lupppig/dbackup/internal/storage"
 	"github.com/spf13/cobra"
 )
@@ -27,46 +30,6 @@ and streams it directly into the database engine.`,
 			NoColor: NoColor,
 		})
 
-		if fileName == "" {
-			return fmt.Errorf("--name is required for restore")
-		}
-
-		if dbURI != "" {
-			if host != "" || user != "" || password != "" || dbName != "" {
-				return fmt.Errorf(
-					"--db-uri cannot be used together with --host, --user, --password, or --dbname",
-				)
-			}
-		} else {
-			if dbType == "" {
-				return fmt.Errorf("--db is required")
-			}
-			if dbType != "sqlite" {
-				if host == "" || user == "" || password == "" || dbName == "" {
-					return fmt.Errorf(
-						"--host, --user, --password, and --dbname are required unless --db-uri is provided",
-					)
-				}
-			}
-		}
-
-		connParams := database.ConnectionParams{
-			DBType:   dbType,
-			Host:     host,
-			User:     user,
-			Port:     port,
-			Password: password,
-			DBName:   dbName,
-			DBUri:    dbURI,
-			TLS: database.TLSConfig{
-				Enabled:    tlsEnabled,
-				Mode:       tlsMode,
-				CACert:     tlsCACert,
-				ClientCert: tlsClientCert,
-				ClientKey:  tlsClientKey,
-			},
-		}
-
 		if target == "" {
 			if output != "" {
 				target = output
@@ -75,68 +38,180 @@ and streams it directly into the database engine.`,
 			}
 		}
 
-		mgr, err := backup.NewRestoreManager(backup.BackupOptions{
-			DBType:     dbType,
-			DBName:     dbName,
-			StorageURI: target,
-			Compress:   compress,
-			Algorithm:  compressionAlgo,
-			FileName:   fileName,
-			Logger:     l,
-		})
-		if err != nil {
-			return err
+		var notifier notify.Notifier
+		if SlackWebhook != "" {
+			notifier = notify.NewSlackNotifier(SlackWebhook)
 		}
 
-		if !cmd.Flags().Changed("dedupe") {
-			dedupe = true // Default to true
-		}
-
-		if dedupe {
-			mgr.SetStorage(storage.NewDedupeStorage(mgr.GetStorage()))
-			l.Info("Deduplication (CAS) active")
-		}
-
-		var adapter database.DBAdapter
-		switch strings.ToLower(dbType) {
-		case "postgres":
-			adapter = &database.PostgresAdapter{}
-		case "mysql":
-			adapter = &database.MysqlAdapter{}
-		case "sqlite":
-			adapter = &database.SqliteAdapter{}
-		default:
-			return fmt.Errorf("unsupported database type")
-		}
-
-		adapter.SetLogger(l)
-
-		var runner database.Runner = &database.LocalRunner{}
-		if remoteExec {
-			if storageRunner, ok := mgr.GetStorage().(database.Runner); ok {
-				runner = storageRunner
+		// If no args, use flags
+		if len(args) == 0 {
+			if fileName == "" {
+				return fmt.Errorf("--name is required for restore")
 			}
+			connParams := database.ConnectionParams{
+				DBType:   dbType,
+				Host:     host,
+				User:     user,
+				Port:     port,
+				Password: password,
+				DBName:   dbName,
+				DBUri:    dbURI,
+				TLS: database.TLSConfig{
+					Enabled:    tlsEnabled,
+					Mode:       tlsMode,
+					CACert:     tlsCACert,
+					ClientCert: tlsClientCert,
+					ClientKey:  tlsClientKey,
+				},
+			}
+			return doRestore(cmd, l, connParams, fileName, notifier)
 		}
 
-		if err := adapter.TestConnection(cmd.Context(), connParams, runner); err != nil {
-			return err
+		// Otherwise loop over args: manifest[:db-uri] concurrently
+		var wg sync.WaitGroup
+		sem := make(chan struct{}, Concurrency)
+		errChan := make(chan string, len(args))
+
+		for _, arg := range args {
+			wg.Add(1)
+			go func(a string) {
+				defer wg.Done()
+				sem <- struct{}{}
+				defer func() { <-sem }()
+
+				var mName, mURI string
+				if strings.Contains(a, ":") && !strings.HasPrefix(a, "/") && !strings.HasPrefix(a, "./") {
+					parts := strings.SplitN(a, ":", 2)
+					if strings.Contains(parts[1], "://") {
+						mName = parts[0]
+						mURI = parts[1]
+					} else {
+						mName = a
+					}
+				} else {
+					mName = a
+				}
+
+				// Create sub-logger
+				subL := l.With("manifest", mName)
+				if mURI != "" {
+					subL = subL.With("target", mURI)
+				}
+
+				connParams := database.ConnectionParams{
+					DBType: dbType,
+					DBUri:  mURI,
+					TLS: database.TLSConfig{
+						Enabled:    tlsEnabled,
+						Mode:       tlsMode,
+						CACert:     tlsCACert,
+						ClientCert: tlsClientCert,
+						ClientKey:  tlsClientKey,
+					},
+				}
+
+				if mURI == "" && dbURI != "" {
+					connParams.DBUri = dbURI
+				}
+
+				if err := doRestore(cmd, subL, connParams, mName, notifier); err != nil {
+					subL.Error("Restore failed", "error", err)
+					errChan <- fmt.Sprintf("%s: %v", mName, err)
+				}
+			}(arg)
 		}
 
-		l.Info("Restore started", "engine", dbType, "database", dbName, "file", fileName)
-		start := time.Now()
+		wg.Wait()
+		close(errChan)
 
-		if err := mgr.Run(cmd.Context(), adapter, connParams); err != nil {
-			l.Error("Restore failed", "error", err)
-			return err
+		errors := []string{}
+		for err := range errChan {
+			errors = append(errors, err)
 		}
 
-		l.Info("Restore finished",
-			"database", dbName,
-			"duration", time.Since(start).String(),
-		)
+		if len(errors) > 0 {
+			return fmt.Errorf("some restores failed:\n%s", strings.Join(errors, "\n"))
+		}
 
 		return nil
 	},
+}
+
+func doRestore(cmd *cobra.Command, l *logger.Logger, connParams database.ConnectionParams, mName string, notifier notify.Notifier) error {
+	if err := connParams.ParseURI(); err != nil {
+		return fmt.Errorf("failed to parse URI: %w", err)
+	}
+
+	if connParams.DBType == "" {
+		// Try to infer from manifest name? risky. let's require it via flags or URI.
+		if dbType != "" {
+			connParams.DBType = dbType
+		} else {
+			return fmt.Errorf("database type could not be determined for manifest %s", mName)
+		}
+	}
+
+	mgr, err := backup.NewRestoreManager(backup.BackupOptions{
+		DBType:     connParams.DBType,
+		DBName:     connParams.DBName,
+		StorageURI: target,
+		Compress:   compress,
+		Algorithm:  compressionAlgo,
+		FileName:   mName,
+		Logger:     l,
+		Notifier:   notifier,
+	})
+	if err != nil {
+		return err
+	}
+
+	if !cmd.Flags().Changed("dedupe") {
+		dedupe = true // Default to true
+	}
+
+	if dedupe {
+		mgr.SetStorage(storage.NewDedupeStorage(mgr.GetStorage()))
+		l.Info("Deduplication (CAS) active")
+	}
+
+	var adapter database.DBAdapter
+	switch strings.ToLower(connParams.DBType) {
+	case "postgres", "postgresql":
+		adapter = &database.PostgresAdapter{}
+	case "mysql":
+		adapter = &database.MysqlAdapter{}
+	case "sqlite":
+		adapter = &database.SqliteAdapter{}
+	default:
+		return fmt.Errorf("unsupported database type: %s", connParams.DBType)
+	}
+
+	adapter.SetLogger(l)
+
+	var runner database.Runner = &database.LocalRunner{}
+	if remoteExec {
+		if storageRunner, ok := mgr.GetStorage().(database.Runner); ok {
+			runner = storageRunner
+		}
+	}
+
+	if err := adapter.TestConnection(cmd.Context(), connParams, runner); err != nil {
+		return err
+	}
+
+	l.Info("Restore started", "engine", connParams.DBType, "database", connParams.DBName, "file", mName)
+	start := time.Now()
+
+	if err := mgr.Run(cmd.Context(), adapter, connParams); err != nil {
+		return err
+	}
+
+	l.Info("Restore finished",
+		"database", connParams.DBName,
+		"duration", time.Since(start).String(),
+	)
+
+	return nil
 }
 
 func init() {
@@ -163,5 +238,6 @@ func init() {
 	restoreCmd.Flags().StringVar(&tlsCACert, "tls-ca-cert", "", "path to CA certificate")
 	restoreCmd.Flags().StringVar(&tlsClientCert, "tls-client-cert", "", "path to client certificate")
 	restoreCmd.Flags().StringVar(&tlsClientKey, "tls-client-key", "", "path to client private key")
+	restoreCmd.Flags().StringVarP(&target, "to", "t", "", "unified targeting URI (e.g. sftp://user@host/path, s3://bucket/path, docker://container/path)")
 	restoreCmd.Flags().BoolVar(&remoteExec, "remote-exec", false, "execute restore tools on the remote storage host (bypasses pg_hba.conf)")
 }

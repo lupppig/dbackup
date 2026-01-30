@@ -40,17 +40,43 @@ func (c *ConnectionParams) ParseURI() error {
 	if err != nil {
 		return err
 	}
+
+	if c.DBType == "" {
+		c.DBType = u.Scheme
+	}
+
 	c.Host = u.Hostname()
 	if p := u.Port(); p != "" {
 		fmt.Sscanf(p, "%d", &c.Port)
-	} else if u.Scheme == "postgres" {
-		c.Port = 5432
-	} else if u.Scheme == "mysql" {
-		c.Port = 3306
+	} else {
+		switch u.Scheme {
+		case "postgres", "postgresql":
+			c.Port = 5432
+			if c.DBType == "" || c.DBType == u.Scheme {
+				c.DBType = "postgres"
+			}
+		case "mysql":
+			c.Port = 3306
+		}
 	}
-	c.User = u.User.Username()
-	c.Password, _ = u.User.Password()
-	c.DBName = strings.TrimPrefix(u.Path, "/")
+
+	if u.User != nil {
+		c.User = u.User.Username()
+		c.Password, _ = u.User.Password()
+	}
+
+	if c.DBType == "sqlite" {
+		c.DBName = u.Path
+		// If URI was sqlite://path/to/db, Path is path/to/db.
+		// If URI was sqlite:///path/to/db, Path is /path/to/db.
+		if u.Host != "" && !strings.HasPrefix(u.Path, "/") {
+			c.DBName = u.Host + "/" + u.Path
+		} else if u.Host != "" {
+			c.DBName = u.Host + u.Path
+		}
+	} else {
+		c.DBName = strings.TrimPrefix(u.Path, "/")
+	}
 	return nil
 }
 

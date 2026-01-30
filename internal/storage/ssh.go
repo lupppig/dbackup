@@ -21,15 +21,29 @@ type SSHStorage struct {
 	sftpClient *sftp.Client
 	remotePath string
 	host       string
+	user       *url.Userinfo
 }
 
 func NewSSHStorage(u *url.URL) (*SSHStorage, error) {
-	user := u.User.Username()
-	pass, _ := u.User.Password()
 	host := u.Host
 	if !strings.Contains(host, ":") {
 		host = host + ":22"
 	}
+
+	return &SSHStorage{
+		remotePath: u.Path,
+		host:       host,
+		user:       u.User,
+	}, nil
+}
+
+func (s *SSHStorage) connect() error {
+	if s.sftpClient != nil {
+		return nil
+	}
+
+	user := s.user.Username()
+	pass, _ := s.user.Password()
 
 	config := &ssh.ClientConfig{
 		User:            user,
@@ -47,9 +61,6 @@ func NewSSHStorage(u *url.URL) (*SSHStorage, error) {
 				signers, err := ag.Signers()
 				if err == nil && len(signers) > 0 {
 					config.Auth = append(config.Auth, ssh.PublicKeysCallback(ag.Signers))
-					fmt.Fprintf(os.Stderr, "SSH: Using agent authentication (found %d keys in %s)\n", len(signers), authSock)
-				} else {
-					fmt.Fprintf(os.Stderr, "SSH: Agent found at %s but it contains no keys. Run 'ssh-add' to load keys.\n", authSock)
 				}
 			}
 		}
@@ -64,12 +75,6 @@ func NewSSHStorage(u *url.URL) (*SSHStorage, error) {
 					signer, err := ssh.ParsePrivateKey(key)
 					if err == nil {
 						config.Auth = append(config.Auth, ssh.PublicKeys(signer))
-						fmt.Fprintf(os.Stderr, "SSH: Loaded key %s\n", keyPath)
-					} else {
-						// Log skip if it's a passphrase protected key we can't handle yet
-						if strings.Contains(err.Error(), "passphrase") {
-							fmt.Fprintf(os.Stderr, "Warning: SSH key %s is encrypted. Please add it to your ssh-agent (ssh-add) to use it with dbackup.\n", k)
-						}
 					}
 				}
 			}
@@ -77,29 +82,29 @@ func NewSSHStorage(u *url.URL) (*SSHStorage, error) {
 	}
 
 	if len(config.Auth) == 0 {
-		return nil, fmt.Errorf("no supported SSH authentication methods found (checked Agent, common keys, and password)")
+		return fmt.Errorf("no supported SSH authentication methods found (checked Agent, common keys, and password)")
 	}
 
-	client, err := ssh.Dial("tcp", host, config)
+	client, err := ssh.Dial("tcp", s.host, config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to %s via SSH: %w (check if the host is reachable and your SSH keys/passwords are correct)", host, err)
+		return fmt.Errorf("failed to connect to %s via SSH: %w (check if the host is reachable and your SSH keys/passwords are correct)", s.host, err)
 	}
 
 	sftpClient, err := sftp.NewClient(client)
 	if err != nil {
 		client.Close()
-		return nil, fmt.Errorf("failed to create sftp client: %w", err)
+		return fmt.Errorf("failed to create sftp client: %w", err)
 	}
 
-	return &SSHStorage{
-		client:     client,
-		sftpClient: sftpClient,
-		remotePath: u.Path,
-		host:       host,
-	}, nil
+	s.client = client
+	s.sftpClient = sftpClient
+	return nil
 }
 
 func (s *SSHStorage) Save(ctx context.Context, name string, r io.Reader) (string, error) {
+	if err := s.connect(); err != nil {
+		return "", err
+	}
 	path := filepath.Join(s.remotePath, name)
 	if err := s.sftpClient.MkdirAll(filepath.Dir(path)); err != nil {
 		return "", err
@@ -118,6 +123,9 @@ func (s *SSHStorage) Save(ctx context.Context, name string, r io.Reader) (string
 }
 
 func (s *SSHStorage) Open(ctx context.Context, name string) (io.ReadCloser, error) {
+	if err := s.connect(); err != nil {
+		return nil, err
+	}
 	return s.sftpClient.Open(filepath.Join(s.remotePath, name))
 }
 
@@ -126,6 +134,9 @@ func (s *SSHStorage) Location() string {
 }
 
 func (s *SSHStorage) PutMetadata(ctx context.Context, name string, data []byte) error {
+	if err := s.connect(); err != nil {
+		return err
+	}
 	path := filepath.Join(s.remotePath, name)
 	if err := s.sftpClient.MkdirAll(filepath.Dir(path)); err != nil {
 		return err
@@ -140,6 +151,9 @@ func (s *SSHStorage) PutMetadata(ctx context.Context, name string, data []byte) 
 }
 
 func (s *SSHStorage) GetMetadata(ctx context.Context, name string) ([]byte, error) {
+	if err := s.connect(); err != nil {
+		return nil, err
+	}
 	path := filepath.Join(s.remotePath, name)
 	f, err := s.sftpClient.Open(path)
 	if err != nil {
@@ -150,8 +164,13 @@ func (s *SSHStorage) GetMetadata(ctx context.Context, name string) ([]byte, erro
 }
 
 func (s *SSHStorage) Close() error {
-	s.sftpClient.Close()
-	return s.client.Close()
+	if s.sftpClient != nil {
+		s.sftpClient.Close()
+	}
+	if s.client != nil {
+		return s.client.Close()
+	}
+	return nil
 }
 
 // Runner implementation
@@ -161,6 +180,9 @@ func (s *SSHStorage) Run(ctx context.Context, name string, args []string, w io.W
 }
 
 func (s *SSHStorage) RunWithIO(ctx context.Context, name string, args []string, r io.Reader, w io.Writer) error {
+	if err := s.connect(); err != nil {
+		return err
+	}
 	session, err := s.client.NewSession()
 	if err != nil {
 		return err

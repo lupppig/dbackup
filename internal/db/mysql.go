@@ -14,6 +14,10 @@ import (
 	"github.com/lupppig/dbackup/internal/logger"
 )
 
+func init() {
+	RegisterAdapter(&MysqlAdapter{})
+}
+
 type MysqlAdapter struct {
 	logger *logger.Logger
 }

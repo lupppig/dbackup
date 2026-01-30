@@ -13,6 +13,10 @@ import (
 	"github.com/lupppig/dbackup/internal/logger"
 )
 
+func init() {
+	RegisterAdapter(&PostgresAdapter{})
+}
+
 /*
 RESTORE SAFETY NOTES (Logical):
 1. dbackup currently prioritizes logical dumps via pg_dump for best compatibility.

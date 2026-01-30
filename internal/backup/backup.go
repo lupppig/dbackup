@@ -9,6 +9,7 @@ import (
 
 	"github.com/lupppig/dbackup/internal/compress"
 	database "github.com/lupppig/dbackup/internal/db"
+	"github.com/lupppig/dbackup/internal/notify"
 	"github.com/lupppig/dbackup/internal/storage"
 )
 
@@ -41,7 +42,8 @@ func (m *BackupManager) SetStorage(s storage.Storage) {
 	m.storage = s
 }
 
-func (m *BackupManager) Run(ctx context.Context, adapter database.DBAdapter, conn database.ConnectionParams) error {
+func (m *BackupManager) Run(ctx context.Context, adapter database.DBAdapter, conn database.ConnectionParams) (err error) {
+	start := time.Now()
 	if err := conn.ParseURI(); err != nil {
 		if m.Options.Logger != nil {
 			m.Options.Logger.Warn("Failed to parse DB URI", "error", err)
@@ -58,7 +60,14 @@ func (m *BackupManager) Run(ctx context.Context, adapter database.DBAdapter, con
 		if prefix == "" {
 			prefix = "backup"
 		}
-		name = fmt.Sprintf("%s-%s.sql", prefix, time.Now().Format("20060102-150405-000000"))
+		dbPart := ""
+		if conn.DBName != "" {
+			// Sanitize DBName for filename
+			dbPart = strings.ReplaceAll(conn.DBName, "/", "_")
+			dbPart = strings.ReplaceAll(dbPart, "\\", "_")
+			dbPart = "-" + dbPart
+		}
+		name = fmt.Sprintf("%s%s-%s.sql", prefix, dbPart, time.Now().Format("20060102-150405.000"))
 	}
 
 	algo := compress.Algorithm(m.Options.Algorithm)
@@ -79,6 +88,25 @@ func (m *BackupManager) Run(ctx context.Context, adapter database.DBAdapter, con
 			finalName += ".tar"
 		}
 	}
+
+	// Stats for notification
+	defer func() {
+		if m.Options.Notifier != nil {
+			status := notify.StatusSuccess
+			if err != nil {
+				status = notify.StatusError
+			}
+			m.Options.Notifier.Notify(ctx, notify.Stats{
+				Status:    status,
+				Operation: "Backup",
+				Engine:    conn.DBType,
+				Database:  conn.DBName,
+				FileName:  finalName,
+				Duration:  time.Since(start),
+				Error:     err,
+			})
+		}
+	}()
 
 	pr, pw := io.Pipe()
 
@@ -125,13 +153,6 @@ func (m *BackupManager) Run(ctx context.Context, adapter database.DBAdapter, con
 	if err := <-errChan; err != nil {
 		return err
 	}
-
-	// Step 4: Finalize atomic save by renaming (if storage supports it, otherwise we leave it)
-	// For now we assume Save either handles atomicity or we rename if we can.
-	// Actually most storage impls in our case take a name and write to it.
-	// Let's refine Storage interface to add a Commit/Rename if needed, or just change Save to be more robust.
-	// For simplicity in this iteration, we will use the final name directly in Save and rely on the unique timestamp for idempotency.
-	// The user asked for engine prefixes instead of 'tmp' in the naming.
 
 	if m.Options.Logger != nil {
 		m.Options.Logger.Info("Backup saved successfully", "location", location)

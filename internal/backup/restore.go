@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/lupppig/dbackup/internal/compress"
 	database "github.com/lupppig/dbackup/internal/db"
+	"github.com/lupppig/dbackup/internal/notify"
 	"github.com/lupppig/dbackup/internal/storage"
 )
 
@@ -35,11 +37,31 @@ func (m *RestoreManager) SetStorage(s storage.Storage) {
 	m.storage = s
 }
 
-func (m *RestoreManager) Run(ctx context.Context, adapter database.DBAdapter, conn database.ConnectionParams) error {
+func (m *RestoreManager) Run(ctx context.Context, adapter database.DBAdapter, conn database.ConnectionParams) (err error) {
+	start := time.Now()
 	name := m.Options.FileName
 	if name == "" {
 		return fmt.Errorf("file name is required for restore")
 	}
+
+	// Stats for notification
+	defer func() {
+		if m.Options.Notifier != nil {
+			status := notify.StatusSuccess
+			if err != nil {
+				status = notify.StatusError
+			}
+			m.Options.Notifier.Notify(ctx, notify.Stats{
+				Status:    status,
+				Operation: "Restore",
+				Engine:    conn.DBType,
+				Database:  conn.DBName,
+				FileName:  name,
+				Duration:  time.Since(start),
+				Error:     err,
+			})
+		}
+	}()
 
 	// We open the stream from storage
 	r, err := m.storage.Open(ctx, name)

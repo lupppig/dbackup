@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/lupppig/dbackup/internal/logger"
+	"github.com/lupppig/dbackup/internal/notify"
 )
 
 type BackupOptions struct {
@@ -17,6 +18,7 @@ type BackupOptions struct {
 	OutputDir  string
 	RemoteExec bool // Force remote execution if storage is remote
 	Logger     *logger.Logger
+	Notifier   notify.Notifier
 }
 
 type BackupProcess interface {

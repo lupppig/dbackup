@@ -2,6 +2,7 @@ package storage
 
 import (
 	"bytes"
+	"crypto/rand"
 	"io"
 	"testing"
 
@@ -10,8 +11,10 @@ import (
 )
 
 func TestChunker_CDC_Deduplication(t *testing.T) {
-	// Create common data (~5MB)
-	commonData := bytes.Repeat([]byte("Some very common data that should be deduplicated. "), 100000)
+	commonData := make([]byte, 2*1024*1024)
+	if _, err := io.ReadFull(rand.Reader, commonData); err != nil {
+		t.Fatal(err)
+	}
 
 	// Stream 1: header1 + commonData
 	stream1 := append([]byte("Header version 1.0 (2026-01-01)\n"), commonData...)

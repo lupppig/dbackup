@@ -98,10 +98,11 @@ func (h *colorHandler) Handle(ctx context.Context, r slog.Record) error {
 	cLevel := level
 	cKey := ""
 	cReset := ""
+	cTime := ""
 
 	if !h.noColor {
 		cReset = colorReset
-		cKey = colorBlue
+		cKey = colorCyan
 		switch r.Level {
 		case slog.LevelInfo:
 			cLevel = colorGreen + level + colorReset
@@ -110,8 +111,9 @@ func (h *colorHandler) Handle(ctx context.Context, r slog.Record) error {
 		case slog.LevelError:
 			cLevel = colorRed + level + colorReset
 		case slog.LevelDebug:
-			cLevel = colorCyan + level + colorReset
+			cLevel = colorBlue + level + colorReset
 		}
+		cTime = "\033[2m" // Faint for time
 	}
 
 	attrs := ""
@@ -120,8 +122,8 @@ func (h *colorHandler) Handle(ctx context.Context, r slog.Record) error {
 		return true
 	})
 
-	fmt.Fprintf(h.Writer, "%s [%s] %s%s\n",
-		r.Time.Format("2006/01/02 15:04:05"),
+	fmt.Fprintf(h.Writer, "%s%s%s [%s] %s%s\n",
+		cTime, r.Time.Format("2006/01/02 15:04:05"), cReset,
 		cLevel,
 		r.Message,
 		attrs,

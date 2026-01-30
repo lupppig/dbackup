@@ -11,6 +11,10 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+func init() {
+	RegisterAdapter(&SqliteAdapter{})
+}
+
 type SqliteAdapter struct {
 	Logger *logger.Logger
 }
@@ -24,8 +28,8 @@ func (sq *SqliteAdapter) SetLogger(l *logger.Logger) {
 }
 
 func (sq *SqliteAdapter) TestConnection(ctx context.Context, connParams ConnectionParams, runner Runner) error {
-	sq.Logger.Info("connecting to sqlite Database...")
-	db, err := sql.Open("sqlite3", connParams.DBUri)
+	sq.Logger.Info("connecting to sqlite Database...", "path", connParams.DBName)
+	db, err := sql.Open("sqlite3", connParams.DBName)
 	if err != nil {
 		return fmt.Errorf("failed to open SQLite DB: %w", err)
 	}
@@ -39,15 +43,15 @@ func (sq *SqliteAdapter) TestConnection(ctx context.Context, connParams Connecti
 }
 
 func (sq *SqliteAdapter) BuildConnection(ctx context.Context, connParams ConnectionParams) (string, error) {
-	if connParams.DBUri == "" {
-		return "", fmt.Errorf("sqlite DB URI is empty")
+	if connParams.DBName == "" {
+		return "", fmt.Errorf("sqlite DB path is empty")
 	}
-	return connParams.DBUri, nil
+	return connParams.DBName, nil
 }
 
 func (sq *SqliteAdapter) RunBackup(ctx context.Context, conn ConnectionParams, runner Runner, w io.Writer) error {
 	if sq.Logger != nil {
-		sq.Logger.Info("Starting SQLite backup...", "path", conn.DBUri)
+		sq.Logger.Info("Starting SQLite backup...", "path", conn.DBName)
 	}
 
 	return sq.runFullBackup(ctx, conn, runner, w)
@@ -55,10 +59,10 @@ func (sq *SqliteAdapter) RunBackup(ctx context.Context, conn ConnectionParams, r
 
 func (sq *SqliteAdapter) runFullBackup(ctx context.Context, conn ConnectionParams, runner Runner, w io.Writer) error {
 	if _, ok := runner.(*LocalRunner); !ok && runner != nil {
-		return runner.Run(ctx, "cat", []string{conn.DBUri}, w)
+		return runner.Run(ctx, "cat", []string{conn.DBName}, w)
 	}
 
-	srcFile, err := os.Open(conn.DBUri)
+	srcFile, err := os.Open(conn.DBName)
 	if err != nil {
 		return err
 	}
@@ -69,12 +73,12 @@ func (sq *SqliteAdapter) runFullBackup(ctx context.Context, conn ConnectionParam
 }
 
 func (sq *SqliteAdapter) RunRestore(ctx context.Context, conn ConnectionParams, runner Runner, r io.Reader) error {
-	sq.Logger.Info("restoring sqlite database...")
+	sq.Logger.Info("restoring sqlite database...", "path", conn.DBName)
 	return sq.runFullRestore(ctx, conn, r)
 }
 
 func (sq *SqliteAdapter) runFullRestore(ctx context.Context, conn ConnectionParams, r io.Reader) error {
-	dstFile, err := os.Create(conn.DBUri)
+	dstFile, err := os.Create(conn.DBName)
 	if err != nil {
 		return err
 	}
