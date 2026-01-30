@@ -37,6 +37,31 @@ func NewContext(ctx context.Context) (context.Context, context.CancelFunc) {
 var (
 	LogJSON bool
 	NoColor bool
+
+	config   string
+	dbType   string
+	host     string
+	user     string
+	password string
+	dbName   string
+	port     int
+	dbURI    string
+
+	storageType     string
+	output          string
+	compress        bool
+	compressionAlgo string
+	fileName        string
+
+	tlsEnabled    bool
+	tlsMode       string
+	tlsCACert     string
+	tlsClientCert string
+	tlsClientKey  string
+
+	target     string
+	remoteExec bool
+	dedupe     bool
 )
 
 func init() {
@@ -45,6 +70,8 @@ func init() {
 
 	rootCmd.PersistentFlags().BoolVar(&LogJSON, "log-json", false, "output logs in JSON format")
 	rootCmd.PersistentFlags().BoolVar(&NoColor, "no-color", false, "disable colored terminal output")
+
+	// Register subcommands
 }
 
 func Execute() error {

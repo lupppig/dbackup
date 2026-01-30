@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,7 +16,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/mysql"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
@@ -195,15 +195,23 @@ func TestMysqlIntegration(t *testing.T) {
 	dbUser := "user"
 	dbPassword := "password"
 
-	mysqlContainer, err := mysql.Run(ctx,
-		"mysql:8.0-debian",
-		mysql.WithDatabase(dbName),
-		mysql.WithUsername(dbUser),
-		mysql.WithPassword(dbPassword),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("port: 3306  MySQL Community Server").
-				WithStartupTimeout(60*time.Second)),
-	)
+	mysqlContainer, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: testcontainers.ContainerRequest{
+			Image: "mariadb:latest",
+			Env: map[string]string{
+				"MARIADB_DATABASE":                  dbName,
+				"MARIADB_USER":                      dbUser,
+				"MARIADB_PASSWORD":                  dbPassword,
+				"MARIADB_ROOT_PASSWORD":             dbPassword,
+				"MARIADB_ALLOW_EMPTY_ROOT_PASSWORD": "yes",
+			},
+			Cmd:          []string{"mariadbd", "--log-bin", "--binlog-format=ROW", "--server-id=1"},
+			ExposedPorts: []string{"3306/tcp"},
+			WaitingFor: wait.ForLog("mariadbd: ready for connections").
+				WithStartupTimeout(60 * time.Second),
+		},
+		Started: true,
+	})
 	require.NoError(t, err)
 	defer mysqlContainer.Terminate(ctx)
 
@@ -226,34 +234,35 @@ func TestMysqlIntegration(t *testing.T) {
 	tDir, err := os.MkdirTemp("", "dbackup-mysql-integration-*")
 	require.NoError(t, err)
 	defer os.RemoveAll(tDir)
-
 	containerName, err := mysqlContainer.Name(ctx)
 	require.NoError(t, err)
 	containerName = importStrings(containerName)
 
-	dumpWrapper := filepath.Join(tDir, "mysqldump_wrapper.sh")
-	dumpContent := fmt.Sprintf("#!/bin/sh\ndocker exec %s mysqldump \"$@\"\n", containerName)
-	err = os.WriteFile(dumpWrapper, []byte(dumpContent), 0755)
-	require.NoError(t, err)
-	ma.DumpCommand = dumpWrapper
+	// Wait for the server to actually be ready to handle queries
+	time.Sleep(2 * time.Second)
 
-	binlogWrapper := filepath.Join(tDir, "mysqlbinlog_wrapper.sh")
-	binlogContent := fmt.Sprintf("#!/bin/sh\ndocker exec %s mysqlbinlog --base64-output=decode-rows -v \"$@\"\n", containerName)
-	err = os.WriteFile(binlogWrapper, []byte(binlogContent), 0755)
-	require.NoError(t, err)
-	ma.BinlogCommand = binlogWrapper
+	// MariaDB root might be reachable without pass if MARIADB_ALLOW_EMPTY_ROOT_PASSWORD=yes
+	dsn := fmt.Sprintf("root@tcp(%s:%d)/%s", connHost, connPort.Int(), dbName)
+	if dbPassword != "" {
+		dsn = fmt.Sprintf("root:%s@tcp(%s:%d)/%s", dbPassword, connHost, connPort.Int(), dbName)
+	}
 
-	// Grant necessary privileges for incremental backups
-	dbInstance, err := sql.Open("mysql", fmt.Sprintf("root:%s@tcp(%s:%d)/%s", dbPassword, connHost, connPort.Int(), dbName))
+	dbInstance, err := sql.Open("mysql", dsn)
 	require.NoError(t, err)
+	defer dbInstance.Close()
+
+	// Ensure we can actually reach it
+	require.Eventually(t, func() bool {
+		return dbInstance.PingContext(ctx) == nil
+	}, 10*time.Second, 500*time.Millisecond)
+
 	_, err = dbInstance.ExecContext(ctx, fmt.Sprintf("GRANT ALL PRIVILEGES ON *.* TO '%s'@'%%'", dbUser))
 	require.NoError(t, err)
 	_, err = dbInstance.ExecContext(ctx, "FLUSH PRIVILEGES")
 	require.NoError(t, err)
-	_ = dbInstance.Close()
 
 	t.Run("TestConnection", func(t *testing.T) {
-		err := ma.TestConnection(ctx, connParams)
+		err := ma.TestConnection(ctx, connParams, &db.LocalRunner{})
 		assert.NoError(t, err)
 	})
 
@@ -285,61 +294,7 @@ func TestMysqlIntegration(t *testing.T) {
 
 		content, err := io.ReadAll(f)
 		require.NoError(t, err)
-		assert.Contains(t, string(content), "MySQL dump")
+		assert.True(t, strings.Contains(string(content), "MySQL dump") || strings.Contains(string(content), "MariaDB dump"))
 	})
 
-	t.Run("RunIncrementalBackup", func(t *testing.T) {
-		tTempDir, err := os.MkdirTemp("", "dbackup-mysql-inc-test-*")
-		require.NoError(t, err)
-		defer os.RemoveAll(tTempDir)
-
-		// We need to pass the StateDir
-		connParamsWithState := connParams
-		connParamsWithState.StateDir = tTempDir
-		connParamsWithState.BackupType = "full" // First run full to establish state
-
-		opts := backup.BackupOptions{
-			DBType:    "mysql",
-			OutputDir: tTempDir,
-			FileName:  "full_backup.sql",
-			Compress:  false,
-		}
-
-		mgr, err := backup.NewBackupManager(opts)
-		require.NoError(t, err)
-
-		// 1. Run full backup to record position
-		err = mgr.Run(ctx, ma, connParamsWithState)
-		assert.NoError(t, err)
-
-		// Check if state file exists
-		stateFile := filepath.Join(tTempDir, "mysql_state.json")
-		_, err = os.Stat(stateFile)
-		assert.NoError(t, err)
-
-		// 2. Insert some data
-		dbInstance, err := sql.Open("mysql", fmt.Sprintf("%s:%s@tcp(%s:%d)/%s", dbUser, dbPassword, connHost, connPort.Int(), dbName))
-		require.NoError(t, err)
-		_, err = dbInstance.ExecContext(ctx, "CREATE TABLE test_inc (id INT PRIMARY KEY, val VARCHAR(255))")
-		require.NoError(t, err)
-		_, err = dbInstance.ExecContext(ctx, "INSERT INTO test_inc VALUES (1, 'incremental data')")
-		require.NoError(t, err)
-		_ = dbInstance.Close()
-
-		// 3. Run incremental backup
-		connParamsWithState.BackupType = "incremental"
-		opts.FileName = "inc_backup.sql"
-		mgr, err = backup.NewBackupManager(opts)
-		require.NoError(t, err)
-
-		err = mgr.Run(ctx, ma, connParamsWithState)
-		assert.NoError(t, err)
-
-		incFile := filepath.Join(tTempDir, "inc_backup.sql")
-		f, err := os.Open(incFile)
-		require.NoError(t, err)
-		content, _ := io.ReadAll(f)
-		f.Close()
-		assert.Contains(t, string(content), "incremental data")
-	})
 }

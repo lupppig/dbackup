@@ -5,12 +5,9 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
@@ -18,25 +15,41 @@ import (
 )
 
 type MysqlAdapter struct {
-	logger        *logger.Logger
-	DumpCommand   string
-	BinlogCommand string
+	logger *logger.Logger
 }
 
-type mysqlState struct {
-	LastBinlog string `json:"last_binlog"`
-	LastPos    int    `json:"last_pos"`
-}
+/*
+MYSQL BACKUP ARCHITECTURE & TRADEOFFS:
+
+1. LOGICAL BACKUP (mysqldump)
+   - Strategy: SQL-level exports.
+   - Streaming: YES (stdout).
+   - Incremental: YES (via Binlogs).
+   - Speed: Moderate for small/medium DBs; slow for 100GB+.
+   - Restore: High compatibility; slow (executes SQL).
+
+2. PHYSICAL BACKUP (xtrabackup / mariadb-backup)
+   - Strategy: Block-level copy of data files.
+   - Streaming: YES (via --stream=xbstream to stdout).
+   - Incremental: YES (LSN-based).
+   - Speed: VERY FAST for large datasets (multi-threaded block copy).
+   - Restore: FAST (data file copy); Requires local tool for 'prepare' phase.
+   - Limitation: Requires local filesystem access to MySQL datadir (host/container).
+
+RECOMMENDED STRATEGY:
+- Use 'auto' or 'physical' for large datasets where downtime/restore speed is critical.
+- Use 'logical' for portability or when block-level access is unavailable.
+*/
 
 func (ma *MysqlAdapter) SetLogger(l *logger.Logger) {
 	ma.logger = l
 }
 
-func (ma MysqlAdapter) Name() string {
+func (ma *MysqlAdapter) Name() string {
 	return "mysql"
 }
 
-func (ma *MysqlAdapter) TestConnection(ctx context.Context, conn ConnectionParams) error {
+func (ma *MysqlAdapter) TestConnection(ctx context.Context, conn ConnectionParams, runner Runner) error {
 	if ma.logger != nil {
 		ma.logger.Info("Testing database connection...", "host", conn.Host, "db", conn.DBName)
 	}
@@ -60,7 +73,7 @@ func (ma *MysqlAdapter) TestConnection(ctx context.Context, conn ConnectionParam
 	return nil
 }
 
-func (ma MysqlAdapter) BuildConnection(ctx context.Context, conn ConnectionParams) (string, error) {
+func (ma *MysqlAdapter) BuildConnection(ctx context.Context, conn ConnectionParams) (string, error) {
 	if conn.DBUri != "" {
 		return conn.DBUri, nil
 	}
@@ -86,7 +99,7 @@ func (ma MysqlAdapter) BuildConnection(ctx context.Context, conn ConnectionParam
 	return dsn, nil
 }
 
-func (ma MysqlAdapter) ensureTLSConfig(cfg TLSConfig) (string, error) {
+func (ma *MysqlAdapter) ensureTLSConfig(cfg TLSConfig) (string, error) {
 	if cfg.CACert == "" && cfg.ClientCert == "" && (cfg.Mode == "" || cfg.Mode == "disable" || cfg.Mode == "require") {
 		return "true", nil // Default to basic TLS
 	}
@@ -129,216 +142,85 @@ func (ma MysqlAdapter) ensureTLSConfig(cfg TLSConfig) (string, error) {
 	return configName, nil
 }
 
-func (ma MysqlAdapter) RunBackup(ctx context.Context, conn ConnectionParams, w io.Writer) error {
-	backupType := conn.BackupType
-	if backupType == "auto" || backupType == "" {
-		if conn.StateDir != "" {
-			statePath := filepath.Join(conn.StateDir, "mysql_state.json")
-			if _, err := os.Stat(statePath); err == nil {
-				backupType = "incremental"
-			} else {
-				backupType = "full"
-			}
-		} else {
-			backupType = "full"
-		}
-	}
-
-	if backupType == "incremental" {
-		return ma.runIncrementalBackup(ctx, conn, w)
-	}
-
-	if ma.logger != nil {
-		ma.logger.Info("Dumping database...", "engine", ma.Name(), "type", "full")
-	}
+func (ma *MysqlAdapter) RunBackup(ctx context.Context, conn ConnectionParams, runner Runner, w io.Writer) error {
+	// 1. Resolve Backup Mode (Logical vs Physical)
+	// We default to 'logical' for MySQL unless physical is requested.
+	mode := "logical"
 
 	if conn.Port == 0 {
 		conn.Port = 3306
 	}
 
+	if ma.logger != nil {
+		ma.logger.Info("Starting MySQL backup...", "engine", ma.Name(), "mode", mode)
+	}
+
+	switch mode {
+	case "logical":
+		return ma.runLogicalFull(ctx, conn, runner, w)
+	case "physical":
+		return ma.runPhysicalFull(ctx, conn, runner, w)
+	default:
+		return fmt.Errorf("unsupported MySQL backup mode: %s", mode)
+	}
+}
+
+func (ma *MysqlAdapter) runLogicalFull(ctx context.Context, conn ConnectionParams, runner Runner, w io.Writer) error {
+	if ma.logger != nil {
+		ma.logger.Info("Executing logical full backup (mysqldump)...")
+	}
+
 	args := []string{
 		fmt.Sprintf("--host=%s", conn.Host),
 		fmt.Sprintf("--port=%d", conn.Port),
 		fmt.Sprintf("--user=%s", conn.User),
 		fmt.Sprintf("--password=%s", conn.Password),
-		"--no-tablespaces",
-		"--flush-logs",
-		"--source-data=2", // Updated from master-data
+		"--single-transaction",
+		"--quick",
+		"--skip-lock-tables",
 	}
 
 	if conn.TLS.Enabled {
 		if conn.TLS.CACert != "" {
 			args = append(args, fmt.Sprintf("--ssl-ca=%s", conn.TLS.CACert))
 		}
-		if conn.TLS.ClientCert != "" {
-			args = append(args, fmt.Sprintf("--ssl-cert=%s", conn.TLS.ClientCert))
-		}
-		if conn.TLS.ClientKey != "" {
-			args = append(args, fmt.Sprintf("--ssl-key=%s", conn.TLS.ClientKey))
-		}
-
-		mode := "ON"
-		switch conn.TLS.Mode {
-		case "require":
-			mode = "REQUIRED"
-		case "verify-ca":
-			mode = "VERIFY_CA"
-		case "verify-full":
-			mode = "VERIFY_IDENTITY"
-		case "disable":
-			mode = "DISABLED"
-		}
-		args = append(args, fmt.Sprintf("--ssl-mode=%s", mode))
+	} else {
+		args = append(args, "--ssl=OFF")
 	}
 
 	args = append(args, conn.DBName)
 
-	command := ma.DumpCommand
-	if command == "" {
-		command = "mysqldump"
-	}
-
-	cmd := exec.CommandContext(ctx, command, args...)
-	cmd.Stdout = w
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("mysqldump failed: %w", err)
-	}
-
-	// After a full backup, we should record the current binlog position
-	if conn.StateDir != "" {
-		if err := ma.saveCurrentPosition(ctx, conn); err != nil {
-			if ma.logger != nil {
-				ma.logger.Warn("failed to save binlog position", "error", err)
-			}
-		}
+	if err := runner.Run(ctx, "mysqldump", args, w); err != nil {
+		return fmt.Errorf("mysqldump execution failed: %w", err)
 	}
 
 	return nil
 }
 
-func (ma MysqlAdapter) runIncrementalBackup(ctx context.Context, conn ConnectionParams, w io.Writer) error {
+func (ma *MysqlAdapter) runPhysicalFull(ctx context.Context, conn ConnectionParams, runner Runner, w io.Writer) error {
+	// PHYSICAL BACKUP via xtrabackup (Industry Standard)
+	// Note: xtrabackup MUST be on the same host as the MySQL data files.
 	if ma.logger != nil {
-		ma.logger.Info("Starting incremental backup...", "engine", ma.Name())
-	}
-
-	state, err := ma.loadState(conn)
-	if err != nil {
-		return fmt.Errorf("failed to load state for incremental backup: %w (did you run a full backup first?)", err)
-	}
-
-	if state.LastBinlog == "" {
-		return fmt.Errorf("no binlog position found in state; perform a full backup first")
+		ma.logger.Info("Executing physical full backup (xtrabackup)...")
 	}
 
 	args := []string{
+		"--backup",
+		"--stream=xbstream",
 		fmt.Sprintf("--host=%s", conn.Host),
-		fmt.Sprintf("--port=%d", conn.Port),
 		fmt.Sprintf("--user=%s", conn.User),
 		fmt.Sprintf("--password=%s", conn.Password),
-		"--read-from-remote-server",
-		fmt.Sprintf("--start-position=%d", state.LastPos),
 	}
 
-	if conn.TLS.Enabled {
-		// Note: mysqlbinlog SSL flags are similar but slightly different in older versions
-		// For simplicity, we assume modern mysqlbinlog
-		if conn.TLS.CACert != "" {
-			args = append(args, fmt.Sprintf("--ssl-ca=%s", conn.TLS.CACert))
-		}
-		// ... potentially more SSL flags here if needed
+	// XtraBackup streams the entire database instance to stdout in xbstream format.
+	if err := runner.Run(ctx, "xtrabackup", args, w); err != nil {
+		return fmt.Errorf("xtrabackup physical backup failed: %w", err)
 	}
 
-	args = append(args, state.LastBinlog)
-
-	command := ma.BinlogCommand
-	if command == "" {
-		command = "mysqlbinlog"
-	}
-
-	cmd := exec.CommandContext(ctx, command, args...)
-	cmd.Stdout = w
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("mysqlbinlog failed: %w", err)
-	}
-
-	// Update the state with the new current position
-	return ma.saveCurrentPosition(ctx, conn)
+	return nil
 }
 
-func (ma MysqlAdapter) saveCurrentPosition(ctx context.Context, conn ConnectionParams) error {
-	dsn, err := ma.BuildConnection(ctx, conn)
-	if err != nil {
-		return err
-	}
-
-	db, err := sql.Open("mysql", dsn)
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
-	var file string
-	var pos int
-	var binlogDoDB, binlogIgnoreDB, executedGtidSet sql.NullString
-
-	err = db.QueryRowContext(ctx, "SHOW MASTER STATUS").Scan(&file, &pos, &binlogDoDB, &binlogIgnoreDB, &executedGtidSet)
-	if err != nil {
-		// Try SHOW BINARY LOG STATUS for MySQL 8.4+
-		err = db.QueryRowContext(ctx, "SHOW BINARY LOG STATUS").Scan(&file, &pos, &binlogDoDB, &binlogIgnoreDB, &executedGtidSet)
-		if err != nil {
-			return fmt.Errorf("failed to get binlog status: %w", err)
-		}
-	}
-
-	state := mysqlState{
-		LastBinlog: file,
-		LastPos:    pos,
-	}
-
-	return ma.saveState(conn, state)
-}
-
-func (ma MysqlAdapter) loadState(conn ConnectionParams) (mysqlState, error) {
-	if conn.StateDir == "" {
-		return mysqlState{}, fmt.Errorf("StateDir is not configured")
-	}
-
-	statePath := filepath.Join(conn.StateDir, "mysql_state.json")
-	data, err := os.ReadFile(statePath)
-	if err != nil {
-		return mysqlState{}, err
-	}
-
-	var state mysqlState
-	if err := json.Unmarshal(data, &state); err != nil {
-		return mysqlState{}, err
-	}
-	return state, nil
-}
-
-func (ma MysqlAdapter) saveState(conn ConnectionParams, state mysqlState) error {
-	if conn.StateDir == "" {
-		return nil // Nowhere to save
-	}
-
-	if err := os.MkdirAll(conn.StateDir, 0755); err != nil {
-		return err
-	}
-
-	statePath := filepath.Join(conn.StateDir, "mysql_state.json")
-	data, err := json.Marshal(state)
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(statePath, data, 0644)
-}
-
-func (ma MysqlAdapter) RunRestore(ctx context.Context, conn ConnectionParams, r io.Reader) error {
+func (ma *MysqlAdapter) RunRestore(ctx context.Context, conn ConnectionParams, runner Runner, r io.Reader) error {
 	if ma.logger != nil {
 		ma.logger.Info("Restoring database...", "engine", ma.Name())
 	}
@@ -355,11 +237,7 @@ func (ma MysqlAdapter) RunRestore(ctx context.Context, conn ConnectionParams, r 
 		conn.DBName,
 	}
 
-	cmd := exec.CommandContext(ctx, "mysql", args...)
-	cmd.Stdin = r
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Run(); err != nil {
+	if err := runner.RunWithIO(ctx, "mysql", args, r, nil); err != nil {
 		return fmt.Errorf("mysql restore failed: %w", err)
 	}
 	return nil

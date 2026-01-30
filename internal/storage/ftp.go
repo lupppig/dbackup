@@ -1,0 +1,81 @@
+package storage
+
+import (
+	"bytes"
+	"context"
+	"io"
+	"net/url"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/jlaffaye/ftp"
+)
+
+type FTPStorage struct {
+	client     *ftp.ServerConn
+	remotePath string
+	host       string
+}
+
+func NewFTPStorage(u *url.URL) (*FTPStorage, error) {
+	user := u.User.Username()
+	pass, _ := u.User.Password()
+	host := u.Host
+	if !strings.Contains(host, ":") {
+		host = host + ":21"
+	}
+
+	c, err := ftp.Dial(host, ftp.DialWithTimeout(5*time.Second))
+	if err != nil {
+		return nil, err
+	}
+
+	err = c.Login(user, pass)
+	if err != nil {
+		c.Quit()
+		return nil, err
+	}
+
+	return &FTPStorage{
+		client:     c,
+		remotePath: u.Path,
+		host:       host,
+	}, nil
+}
+
+func (s *FTPStorage) Save(ctx context.Context, name string, r io.Reader) (string, error) {
+	path := filepath.Join(s.remotePath, name)
+	err := s.client.Stor(path, r)
+	if err != nil {
+		return "", err
+	}
+	return "ftp://" + s.host + path, nil
+}
+
+func (s *FTPStorage) Open(ctx context.Context, name string) (io.ReadCloser, error) {
+	return s.client.Retr(filepath.Join(s.remotePath, name))
+}
+
+func (s *FTPStorage) Location() string {
+	return "ftp://" + s.host + s.remotePath
+}
+
+func (s *FTPStorage) PutMetadata(ctx context.Context, name string, data []byte) error {
+	path := filepath.Join(s.remotePath, name)
+	return s.client.Stor(path, bytes.NewReader(data))
+}
+
+func (s *FTPStorage) GetMetadata(ctx context.Context, name string) ([]byte, error) {
+	path := filepath.Join(s.remotePath, name)
+	r, err := s.client.Retr(path)
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+	return io.ReadAll(r)
+}
+
+func (s *FTPStorage) Close() error {
+	return s.client.Quit()
+}

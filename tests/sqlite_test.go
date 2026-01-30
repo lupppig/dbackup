@@ -53,16 +53,16 @@ func TestSqliteIntegration(t *testing.T) {
 	connParams := db.ConnectionParams{DBUri: dbPath}
 
 	t.Run("TestConnection", func(t *testing.T) {
-		err := sa.TestConnection(ctx, connParams)
+		err := sa.TestConnection(ctx, connParams, &db.LocalRunner{})
 		assert.NoError(t, err)
 	})
 
 	t.Run("RunBackupViaManager", func(t *testing.T) {
 		backupDir := filepath.Join(tempDir, "backups")
 		opts := backup.BackupOptions{
-			OutputDir: backupDir,
-			FileName:  "test_backup.db",
-			Compress:  false,
+			StorageURI: "local://" + backupDir,
+			FileName:   "test_backup.db",
+			Compress:   false,
 		}
 
 		mgr, err := backup.NewBackupManager(opts)
@@ -72,8 +72,9 @@ func TestSqliteIntegration(t *testing.T) {
 		assert.NoError(t, err)
 
 		backupFile := filepath.Join(backupDir, opts.FileName)
-		_, err = os.Stat(backupFile)
+		fi, err := os.Stat(backupFile)
 		assert.NoError(t, err)
+		assert.Greater(t, fi.Size(), int64(0), "backup file should not be empty")
 
 		copyDB, err := sql.Open("sqlite3", backupFile)
 		require.NoError(t, err)
@@ -89,10 +90,10 @@ func TestSqliteIntegration(t *testing.T) {
 		backupDir := filepath.Join(tempDir, "backups")
 		restorePath := filepath.Join(tempDir, "restored.db")
 		opts := backup.BackupOptions{
-			OutputDir: backupDir,
-			FileName:  "test_backup.db",
-			Compress:  false,
-			Logger:    l,
+			StorageURI: "local://" + backupDir,
+			FileName:   "test_backup.db",
+			Compress:   false,
+			Logger:     l,
 		}
 
 		rmgr, err := backup.NewRestoreManager(opts)

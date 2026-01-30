@@ -3,7 +3,7 @@ package backup
 import (
 	"context"
 	"fmt"
-	"strings"
+	"io"
 
 	"github.com/lupppig/dbackup/internal/compress"
 	database "github.com/lupppig/dbackup/internal/db"
@@ -16,18 +16,23 @@ type RestoreManager struct {
 }
 
 func NewRestoreManager(opts BackupOptions) (*RestoreManager, error) {
-	var s storage.Storage
-	switch strings.ToLower(opts.Storage) {
-	case "local", "":
-		s = storage.NewLocalStorage(opts.OutputDir)
-	default:
-		return nil, fmt.Errorf("unsupported storage type: %s", opts.Storage)
+	s, err := storage.FromURI(opts.StorageURI)
+	if err != nil {
+		return nil, err
 	}
 
 	return &RestoreManager{
 		Options: opts,
 		storage: s,
 	}, nil
+}
+
+func (m *RestoreManager) GetStorage() storage.Storage {
+	return m.storage
+}
+
+func (m *RestoreManager) SetStorage(s storage.Storage) {
+	m.storage = s
 }
 
 func (m *RestoreManager) Run(ctx context.Context, adapter database.DBAdapter, conn database.ConnectionParams) error {
@@ -43,7 +48,7 @@ func (m *RestoreManager) Run(ctx context.Context, adapter database.DBAdapter, co
 	}
 	defer r.Close()
 
-	var finalReader = r
+	var finalReader io.Reader = r
 
 	// Handle decompression if requested/detected
 	algo := compress.Algorithm(m.Options.Algorithm)
@@ -60,7 +65,12 @@ func (m *RestoreManager) Run(ctx context.Context, adapter database.DBAdapter, co
 		finalReader = c
 	}
 
-	if err := adapter.RunRestore(ctx, conn, finalReader); err != nil {
+	var runner database.Runner = &database.LocalRunner{}
+	if r, ok := m.storage.(database.Runner); ok {
+		runner = r
+	}
+
+	if err := adapter.RunRestore(ctx, conn, runner, finalReader); err != nil {
 		return fmt.Errorf("restore failed: %w", err)
 	}
 

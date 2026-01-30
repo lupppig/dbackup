@@ -2,41 +2,14 @@ package cmd
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/lupppig/dbackup/internal/backup"
 	database "github.com/lupppig/dbackup/internal/db"
 	"github.com/lupppig/dbackup/internal/logger"
+	storagepkg "github.com/lupppig/dbackup/internal/storage"
 	"github.com/spf13/cobra"
-)
-
-var (
-	config   string
-	dbType   string
-	host     string
-	user     string
-	password string
-	dbName   string
-	port     int
-	dbURI    string
-
-	storage         string
-	output          string
-	compress        bool
-	compressionAlgo string
-	fileName        string
-	backupType      string
-
-	tlsEnabled    bool
-	tlsMode       string
-	tlsCACert     string
-	tlsClientCert string
-	tlsClientKey  string
-
-	stateDir string
 )
 
 var backupCmd = &cobra.Command{
@@ -82,23 +55,11 @@ process fails, dbackup exits with a non-zero status code.`,
 			return fmt.Errorf("--tls-client-key is required when --tls-client-cert is provided")
 		}
 
-		if stateDir == "" {
-			home, err := os.UserHomeDir()
-			if err != nil {
-				return fmt.Errorf("failed to get user home directory: %w", err)
-			}
-			stateDir = filepath.Join(home, ".dbackup")
-		}
-
-		if err := os.MkdirAll(stateDir, 0755); err != nil {
-			return fmt.Errorf("failed to create state directory: %w", err)
-		}
-
 		connParams := database.ConnectionParams{
-			DBtype:   dbType,
+			DBType:   dbType,
 			Host:     host,
-			User:     user,
 			Port:     port,
+			User:     user,
 			Password: password,
 			DBName:   dbName,
 			DBUri:    dbURI,
@@ -109,23 +70,39 @@ process fails, dbackup exits with a non-zero status code.`,
 				ClientCert: tlsClientCert,
 				ClientKey:  tlsClientKey,
 			},
-			BackupType: backupType,
-			StateDir:   stateDir,
+		}
+
+		if target == "" {
+			if output != "" {
+				target = output
+			} else {
+				target = "."
+			}
 		}
 
 		mgr, err := backup.NewBackupManager(backup.BackupOptions{
 			DBType:     dbType,
 			DBName:     dbName,
-			Storage:    storage,
+			Storage:    storageType,
+			StorageURI: target,
 			Compress:   compress,
 			Algorithm:  compressionAlgo,
 			FileName:   fileName,
-			BackupType: backupType,
 			OutputDir:  output,
+			RemoteExec: remoteExec,
 			Logger:     l,
 		})
 		if err != nil {
 			return err
+		}
+
+		if !cmd.Flags().Changed("dedupe") {
+			dedupe = true // Default to true
+		}
+
+		if dedupe {
+			mgr.SetStorage(storagepkg.NewDedupeStorage(mgr.GetStorage()))
+			l.Info("Deduplication (CAS) active")
 		}
 
 		var adapter database.DBAdapter
@@ -142,15 +119,18 @@ process fails, dbackup exits with a non-zero status code.`,
 
 		adapter.SetLogger(l)
 
-		if err := adapter.TestConnection(cmd.Context(), connParams); err != nil {
+		var runner database.Runner = &database.LocalRunner{}
+		if remoteExec {
+			if storageRunner, ok := mgr.GetStorage().(database.Runner); ok {
+				runner = storageRunner
+			}
+		}
+
+		if err := adapter.TestConnection(cmd.Context(), connParams, runner); err != nil {
 			return err
 		}
 
-		if backupType == "" {
-			backupType = "full"
-		}
-
-		l.Info("Backup started", "engine", dbType, "database", dbName, "type", backupType)
+		l.Info("Backup started", "engine", dbType, "database", dbName, "target", storagepkg.Scrub(target), "dedupe", dedupe)
 		start := time.Now()
 
 		if err := mgr.Run(cmd.Context(), adapter, connParams); err != nil {
@@ -181,12 +161,11 @@ func init() {
 
 	backupCmd.Flags().StringVar(&dbURI, "db-uri", "", "full database connection URI (overrides individual connection flags)")
 
-	backupCmd.Flags().StringVar(&storage, "storage", "", "remote storage target (if omitted, backup is stored locally)")
+	backupCmd.Flags().StringVar(&storageType, "storage", "", "remote storage target (if omitted, backup is stored locally)")
 	backupCmd.Flags().StringVar(&output, "out", "", "local output path for backup file (defaults to current directory)")
 	backupCmd.Flags().BoolVar(&compress, "compress", true, "compress backup output (default true)")
 	backupCmd.Flags().StringVar(&compressionAlgo, "compression-algo", "lz4", "compression algorithm (gzip, zstd, lz4, none, defaults to lz4). All are wrapped in a tar archive unless 'none' is specified.")
-	backupCmd.Flags().StringVar(&backupType, "backup-type", "", "either to perform differential or incremental backup if not provided default to... full backup")
-	backupCmd.Flags().StringVar(&fileName, "f", "", "custom backup file name")
+	backupCmd.Flags().StringVar(&fileName, "name", "", "custom backup file name")
 
 	backupCmd.Flags().BoolVar(&tlsEnabled, "tls", false, "enable TLS/SSL for database connection")
 	backupCmd.Flags().StringVar(&tlsMode, "tls-mode", "disable", "TLS mode (disable, require, verify-ca, verify-full)")
@@ -194,5 +173,7 @@ func init() {
 	backupCmd.Flags().StringVar(&tlsClientCert, "tls-client-cert", "", "path to client certificate for mutual TLS (mTLS)")
 	backupCmd.Flags().StringVar(&tlsClientKey, "tls-client-key", "", "path to client private key for mutual TLS (mTLS)")
 
-	backupCmd.Flags().StringVar(&stateDir, "state-dir", "", "directory to store state for incremental backups")
+	backupCmd.Flags().StringVarP(&target, "to", "t", "", "unified targeting URI (e.g. sftp://user@host/path, s3://bucket/path, docker://container/path)")
+	backupCmd.Flags().BoolVar(&remoteExec, "remote-exec", false, "execute backup tools on the remote storage host (bypasses pg_hba.conf)")
+	backupCmd.Flags().BoolVar(&dedupe, "dedupe", true, "Enable storage-level deduplication (CAS, default true)")
 }

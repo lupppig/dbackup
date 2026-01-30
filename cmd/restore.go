@@ -2,14 +2,13 @@ package cmd
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/lupppig/dbackup/internal/backup"
 	database "github.com/lupppig/dbackup/internal/db"
 	"github.com/lupppig/dbackup/internal/logger"
+	"github.com/lupppig/dbackup/internal/storage"
 	"github.com/spf13/cobra"
 )
 
@@ -29,7 +28,7 @@ and streams it directly into the database engine.`,
 		})
 
 		if fileName == "" {
-			return fmt.Errorf("--f (filename) is required for restore")
+			return fmt.Errorf("--name is required for restore")
 		}
 
 		if dbURI != "" {
@@ -51,16 +50,8 @@ and streams it directly into the database engine.`,
 			}
 		}
 
-		if stateDir == "" {
-			home, err := os.UserHomeDir()
-			if err != nil {
-				return fmt.Errorf("failed to get user home directory: %w", err)
-			}
-			stateDir = filepath.Join(home, ".dbackup")
-		}
-
 		connParams := database.ConnectionParams{
-			DBtype:   dbType,
+			DBType:   dbType,
 			Host:     host,
 			User:     user,
 			Port:     port,
@@ -74,23 +65,36 @@ and streams it directly into the database engine.`,
 				ClientCert: tlsClientCert,
 				ClientKey:  tlsClientKey,
 			},
-			BackupType: backupType,
-			StateDir:   stateDir,
+		}
+
+		if target == "" {
+			if output != "" {
+				target = output
+			} else {
+				target = "."
+			}
 		}
 
 		mgr, err := backup.NewRestoreManager(backup.BackupOptions{
 			DBType:     dbType,
 			DBName:     dbName,
-			Storage:    storage,
+			StorageURI: target,
 			Compress:   compress,
 			Algorithm:  compressionAlgo,
 			FileName:   fileName,
-			BackupType: backupType,
-			OutputDir:  output,
 			Logger:     l,
 		})
 		if err != nil {
 			return err
+		}
+
+		if !cmd.Flags().Changed("dedupe") {
+			dedupe = true // Default to true
+		}
+
+		if dedupe {
+			mgr.SetStorage(storage.NewDedupeStorage(mgr.GetStorage()))
+			l.Info("Deduplication (CAS) active")
 		}
 
 		var adapter database.DBAdapter
@@ -106,6 +110,17 @@ and streams it directly into the database engine.`,
 		}
 
 		adapter.SetLogger(l)
+
+		var runner database.Runner = &database.LocalRunner{}
+		if remoteExec {
+			if storageRunner, ok := mgr.GetStorage().(database.Runner); ok {
+				runner = storageRunner
+			}
+		}
+
+		if err := adapter.TestConnection(cmd.Context(), connParams, runner); err != nil {
+			return err
+		}
 
 		l.Info("Restore started", "engine", dbType, "database", dbName, "file", fileName)
 		start := time.Now()
@@ -134,19 +149,19 @@ func init() {
 	restoreCmd.Flags().StringVar(&dbName, "dbname", "", "database name")
 	restoreCmd.Flags().IntVar(&port, "port", 0, "database port")
 
-	restoreCmd.Flags().StringVar(&dbURI, "db-uri", "", "full database connection URI")
+	restoreCmd.Flags().StringVar(&dbURI, "db-uri", "", "Full database connection URI (overrides individual flags)")
+	restoreCmd.Flags().BoolVar(&dedupe, "dedupe", true, "Enable storage-level deduplication (CAS, default true)")
 
-	restoreCmd.Flags().StringVar(&storage, "storage", "", "storage target (local, etc.)")
+	restoreCmd.Flags().StringVar(&storageType, "storage", "", "storage target (local, etc.)")
 	restoreCmd.Flags().StringVar(&output, "out", "", "local directory for backup files")
 	restoreCmd.Flags().BoolVar(&compress, "compress", true, "decompress the backup (default true)")
 	restoreCmd.Flags().StringVar(&compressionAlgo, "compression-algo", "lz4", "compression algorithm used for the backup")
-	restoreCmd.Flags().StringVar(&fileName, "f", "", "backup file name to restore")
-	restoreCmd.Flags().StringVar(&backupType, "backup-type", "full", "type of backup being restored")
+	restoreCmd.Flags().StringVar(&fileName, "name", "", "backup file name to restore")
 
 	restoreCmd.Flags().BoolVar(&tlsEnabled, "tls", false, "enable TLS/SSL for database connection")
 	restoreCmd.Flags().StringVar(&tlsMode, "tls-mode", "disable", "TLS mode")
 	restoreCmd.Flags().StringVar(&tlsCACert, "tls-ca-cert", "", "path to CA certificate")
 	restoreCmd.Flags().StringVar(&tlsClientCert, "tls-client-cert", "", "path to client certificate")
 	restoreCmd.Flags().StringVar(&tlsClientKey, "tls-client-key", "", "path to client private key")
-	restoreCmd.Flags().StringVar(&stateDir, "state-dir", "", "directory to store state")
+	restoreCmd.Flags().BoolVar(&remoteExec, "remote-exec", false, "execute restore tools on the remote storage host (bypasses pg_hba.conf)")
 }

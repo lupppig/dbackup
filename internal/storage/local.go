@@ -20,22 +20,42 @@ func NewLocalStorage(baseDir string) *LocalStorage {
 }
 
 func (s *LocalStorage) Save(ctx context.Context, name string, r io.Reader) (string, error) {
-	if err := os.MkdirAll(s.baseDir, 0755); err != nil {
+	path := filepath.Join(s.baseDir, name)
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return "", fmt.Errorf("failed to create directory: %w", err)
 	}
 
-	path := filepath.Join(s.baseDir, name)
-	f, err := os.Create(path)
+	tmpPath := path + ".tmp"
+	f, err := os.Create(tmpPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to create file: %w", err)
+		return "", fmt.Errorf("failed to create temp file: %w", err)
 	}
-	defer f.Close()
+	defer os.Remove(tmpPath) // Cleanup if we fail
 
 	if _, err := io.Copy(f, r); err != nil {
+		f.Close()
 		return "", fmt.Errorf("failed to write data: %w", err)
+	}
+	f.Close()
+
+	if err := os.Rename(tmpPath, path); err != nil {
+		return "", fmt.Errorf("failed to finalize file (rename): %w", err)
 	}
 
 	return path, nil
+}
+
+func (s *LocalStorage) PutMetadata(ctx context.Context, name string, data []byte) error {
+	path := filepath.Join(s.baseDir, name)
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0644)
+}
+
+func (s *LocalStorage) GetMetadata(ctx context.Context, name string) ([]byte, error) {
+	path := filepath.Join(s.baseDir, name)
+	return os.ReadFile(path)
 }
 
 func (s *LocalStorage) Location() string {

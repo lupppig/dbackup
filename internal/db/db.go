@@ -4,6 +4,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
+	"os"
+	"os/exec"
+	"strings"
 
 	"github.com/lupppig/dbackup/internal/logger"
 )
@@ -17,7 +21,7 @@ type TLSConfig struct {
 }
 
 type ConnectionParams struct {
-	DBtype   string
+	DBType   string
 	DBName   string
 	Password string
 	User     string
@@ -26,26 +30,63 @@ type ConnectionParams struct {
 	DBUri    string
 
 	TLS TLSConfig
+}
 
-	BackupType string // "full" or "incremental"
-	StateDir   string // Directory to share/store state between runs
+func (c *ConnectionParams) ParseURI() error {
+	if c.DBUri == "" {
+		return nil
+	}
+	u, err := url.Parse(c.DBUri)
+	if err != nil {
+		return err
+	}
+	c.Host = u.Hostname()
+	if p := u.Port(); p != "" {
+		fmt.Sscanf(p, "%d", &c.Port)
+	} else if u.Scheme == "postgres" {
+		c.Port = 5432
+	} else if u.Scheme == "mysql" {
+		c.Port = 3306
+	}
+	c.User = u.User.Username()
+	c.Password, _ = u.User.Password()
+	c.DBName = strings.TrimPrefix(u.Path, "/")
+	return nil
 }
 
 type BackUpOptions struct {
-	Storage    string
-	Compress   bool
-	Algorithm  string
-	FileName   string
-	BackupType string
-	OutputDir  string
+	Storage   string
+	Compress  bool
+	Algorithm string
+	FileName  string
+	OutputDir string
+}
+
+type Runner interface {
+	Run(ctx context.Context, name string, args []string, w io.Writer) error
+	RunWithIO(ctx context.Context, name string, args []string, r io.Reader, w io.Writer) error
+}
+
+type LocalRunner struct{}
+
+func (r *LocalRunner) Run(ctx context.Context, name string, args []string, w io.Writer) error {
+	return r.RunWithIO(ctx, name, args, nil, w)
+}
+
+func (r *LocalRunner) RunWithIO(ctx context.Context, name string, args []string, stdin io.Reader, stdout io.Writer) error {
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Stdout = stdout
+	cmd.Stdin = stdin
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 type DBAdapter interface {
 	Name() string
-	TestConnection(ctx context.Context, conn ConnectionParams) error
+	TestConnection(ctx context.Context, conn ConnectionParams, runner Runner) error
 	BuildConnection(ctx context.Context, conn ConnectionParams) (string, error)
-	RunBackup(ctx context.Context, conn ConnectionParams, w io.Writer) error
-	RunRestore(ctx context.Context, conn ConnectionParams, r io.Reader) error
+	RunBackup(ctx context.Context, conn ConnectionParams, runner Runner, w io.Writer) error
+	RunRestore(ctx context.Context, conn ConnectionParams, runner Runner, r io.Reader) error
 	SetLogger(l *logger.Logger)
 }
 

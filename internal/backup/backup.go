@@ -18,12 +18,13 @@ type BackupManager struct {
 }
 
 func NewBackupManager(opts BackupOptions) (*BackupManager, error) {
-	var s storage.Storage
-	switch strings.ToLower(opts.Storage) {
-	case "local", "":
-		s = storage.NewLocalStorage(opts.OutputDir)
-	default:
-		return nil, fmt.Errorf("unsupported storage type: %s", opts.Storage)
+	storageURI := opts.StorageURI
+	if storageURI == "" && opts.OutputDir != "" {
+		storageURI = opts.OutputDir
+	}
+	s, err := storage.FromURI(storageURI)
+	if err != nil {
+		return nil, err
 	}
 
 	return &BackupManager{
@@ -32,17 +33,32 @@ func NewBackupManager(opts BackupOptions) (*BackupManager, error) {
 	}, nil
 }
 
+func (m *BackupManager) GetStorage() storage.Storage {
+	return m.storage
+}
+
+func (m *BackupManager) SetStorage(s storage.Storage) {
+	m.storage = s
+}
+
 func (m *BackupManager) Run(ctx context.Context, adapter database.DBAdapter, conn database.ConnectionParams) error {
-	if conn.BackupType == "" {
-		conn.BackupType = m.Options.BackupType
+	if err := conn.ParseURI(); err != nil {
+		if m.Options.Logger != nil {
+			m.Options.Logger.Warn("Failed to parse DB URI", "error", err)
+		}
 	}
-	if conn.BackupType == "" {
-		conn.BackupType = "auto"
+
+	if m.Options.Logger != nil {
+		m.Options.Logger.Debug("Backup process started", "engine", conn.DBType)
 	}
 
 	name := m.Options.FileName
 	if name == "" {
-		name = fmt.Sprintf("backup_%d.sql", time.Now().Unix())
+		prefix := strings.ToLower(conn.DBType)
+		if prefix == "" {
+			prefix = "backup"
+		}
+		name = fmt.Sprintf("%s-%s.sql", prefix, time.Now().Format("20060102-150405-000000"))
 	}
 
 	algo := compress.Algorithm(m.Options.Algorithm)
@@ -84,7 +100,17 @@ func (m *BackupManager) Run(ctx context.Context, adapter database.DBAdapter, con
 			w = c
 		}
 
-		if err := adapter.RunBackup(ctx, conn, w); err != nil {
+		var r database.Runner = &database.LocalRunner{}
+		if m.Options.RemoteExec {
+			if runner, ok := m.storage.(database.Runner); ok {
+				if m.Options.Logger != nil {
+					m.Options.Logger.Info("Using remote runner from storage backend (remote-exec enabled)")
+				}
+				r = runner
+			}
+		}
+
+		if err := adapter.RunBackup(ctx, conn, r, w); err != nil {
 			errChan <- err
 			return
 		}
@@ -93,13 +119,19 @@ func (m *BackupManager) Run(ctx context.Context, adapter database.DBAdapter, con
 
 	location, err := m.storage.Save(ctx, finalName, pr)
 	if err != nil {
-		pr.CloseWithError(err)
 		return fmt.Errorf("storage save failed: %w", err)
 	}
 
 	if err := <-errChan; err != nil {
 		return err
 	}
+
+	// Step 4: Finalize atomic save by renaming (if storage supports it, otherwise we leave it)
+	// For now we assume Save either handles atomicity or we rename if we can.
+	// Actually most storage impls in our case take a name and write to it.
+	// Let's refine Storage interface to add a Commit/Rename if needed, or just change Save to be more robust.
+	// For simplicity in this iteration, we will use the final name directly in Save and rely on the unique timestamp for idempotency.
+	// The user asked for engine prefixes instead of 'tmp' in the naming.
 
 	if m.Options.Logger != nil {
 		m.Options.Logger.Info("Backup saved successfully", "location", location)

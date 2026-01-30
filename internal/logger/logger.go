@@ -26,15 +26,16 @@ type Config struct {
 	Writer  io.Writer
 	JSON    bool
 	NoColor bool
+	Level   slog.Level
 }
 
 func New(cfg Config) *Logger {
 	if cfg.Writer == nil {
-		cfg.Writer = os.Stdout
+		cfg.Writer = os.Stderr
 	}
 
 	opts := &slog.HandlerOptions{
-		Level: slog.LevelInfo,
+		Level: cfg.Level,
 		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
 			if a.Key == slog.TimeKey {
 				return slog.Attr{
@@ -52,6 +53,7 @@ func New(cfg Config) *Logger {
 	} else {
 		handler = &colorHandler{
 			Handler: slog.NewTextHandler(cfg.Writer, opts),
+			Writer:  cfg.Writer,
 			noColor: cfg.NoColor,
 		}
 	}
@@ -87,6 +89,7 @@ func (l *Logger) With(args ...any) *Logger {
 
 type colorHandler struct {
 	slog.Handler
+	Writer  io.Writer
 	noColor bool
 }
 
@@ -117,7 +120,7 @@ func (h *colorHandler) Handle(ctx context.Context, r slog.Record) error {
 		return true
 	})
 
-	fmt.Printf("%s [%s] %s%s\n",
+	fmt.Fprintf(h.Writer, "%s [%s] %s%s\n",
 		r.Time.Format("2006/01/02 15:04:05"),
 		cLevel,
 		r.Message,
