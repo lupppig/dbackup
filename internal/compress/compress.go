@@ -8,6 +8,8 @@ import (
 	"os"
 	"sync"
 
+	"strings"
+
 	"github.com/klauspost/compress/zstd"
 	"github.com/pierrec/lz4/v4"
 )
@@ -191,6 +193,22 @@ func NewReader(r io.Reader, algo Algorithm) (*Decompressor, error) {
 		Reader: decomp,
 		closer: closer,
 	}, nil
+}
+
+func DetectAlgorithm(filename string) Algorithm {
+	if strings.HasSuffix(filename, ".gz") {
+		return Gzip
+	}
+	if strings.HasSuffix(filename, ".lz4") {
+		return Lz4
+	}
+	if strings.HasSuffix(filename, ".zst") {
+		return Zstd
+	}
+	if strings.HasSuffix(filename, ".tar") {
+		return Tar
+	}
+	return None
 }
 
 func (d *Decompressor) Close() error {

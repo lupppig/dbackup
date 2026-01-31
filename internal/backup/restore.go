@@ -74,14 +74,15 @@ func (m *RestoreManager) Run(ctx context.Context, adapter database.DBAdapter, co
 
 	// Handle decompression if requested/detected
 	algo := compress.Algorithm(m.Options.Algorithm)
-	if m.Options.Compress || (algo != "" && algo != compress.None) {
-		if algo == "" {
-			algo = compress.Lz4 // Default
-		}
+	if algo == "" || algo == compress.None {
+		// Auto-detect from filename
+		algo = compress.DetectAlgorithm(name)
+	}
 
+	if algo != compress.None {
 		c, err := compress.NewReader(r, algo)
 		if err != nil {
-			return fmt.Errorf("failed to create decompression reader: %w", err)
+			return fmt.Errorf("failed to create decompression reader for %s: %w", algo, err)
 		}
 		defer c.Close()
 		finalReader = c
