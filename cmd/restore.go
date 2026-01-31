@@ -30,6 +30,10 @@ and streams it directly into the database engine.`,
 			NoColor: NoColor,
 		})
 
+		if from != "" {
+			target = from
+		}
+
 		if target == "" {
 			if output != "" {
 				target = output
@@ -238,6 +242,7 @@ func init() {
 	restoreCmd.Flags().StringVar(&tlsCACert, "tls-ca-cert", "", "path to CA certificate")
 	restoreCmd.Flags().StringVar(&tlsClientCert, "tls-client-cert", "", "path to client certificate")
 	restoreCmd.Flags().StringVar(&tlsClientKey, "tls-client-key", "", "path to client private key")
-	restoreCmd.Flags().StringVarP(&target, "to", "t", "", "unified targeting URI (e.g. sftp://user@host/path, s3://bucket/path, docker://container/path)")
+	restoreCmd.Flags().StringVarP(&target, "to", "t", "", "source URI for restore (e.g. sftp://user@host/path)")
+	restoreCmd.Flags().StringVarP(&from, "from", "f", "", "unified source URI for restore (alias for --to)")
 	restoreCmd.Flags().BoolVar(&remoteExec, "remote-exec", false, "execute restore tools on the remote storage host (bypasses pg_hba.conf)")
 }

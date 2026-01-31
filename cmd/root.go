@@ -60,6 +60,7 @@ var (
 	tlsClientKey  string
 
 	target     string
+	from       string
 	remoteExec bool
 	dedupe     bool
 
