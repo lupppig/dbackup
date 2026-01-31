@@ -272,10 +272,10 @@ func TestMysqlIntegration(t *testing.T) {
 		defer os.RemoveAll(tTempDir)
 
 		opts := backup.BackupOptions{
-			DBType:    "mysql",
-			OutputDir: tTempDir,
-			FileName:  "test_backup.sql",
-			Compress:  false,
+			DBType:     "mysql",
+			StorageURI: "local://" + tTempDir,
+			FileName:   "test_backup.sql",
+			Compress:   false,
 		}
 
 		mgr, err := backup.NewBackupManager(opts)

@@ -47,8 +47,6 @@ var (
 	port     int
 	dbURI    string
 
-	storageType     string
-	output          string
 	compress        bool
 	compressionAlgo string
 	fileName        string

@@ -134,10 +134,10 @@ func TestPostgresIntegration(t *testing.T) {
 		defer os.RemoveAll(tempDir)
 
 		opts := backup.BackupOptions{
-			DBType:    "postgres",
-			OutputDir: tempDir,
-			FileName:  "test_logical.sql",
-			Compress:  false,
+			DBType:     "postgres",
+			StorageURI: "local://" + tempDir,
+			FileName:   "test_logical.sql",
+			Compress:   false,
 		}
 
 		mgr, err := backup.NewBackupManager(opts)

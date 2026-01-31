@@ -48,11 +48,7 @@ process fails, dbackup exits with a non-zero status code.`,
 		}
 
 		if target == "" {
-			if output != "" {
-				target = output
-			} else {
-				target = "."
-			}
+			target = "."
 		}
 
 		if len(uris) == 0 {
@@ -138,7 +134,6 @@ func doBackup(cmd *cobra.Command, l *logger.Logger, connParams database.Connecti
 		Compress:   compress,
 		Algorithm:  compressionAlgo,
 		FileName:   fileName,
-		OutputDir:  output,
 		RemoteExec: remoteExec,
 		Logger:     l,
 		Notifier:   notifier,
@@ -210,7 +205,6 @@ func init() {
 
 	backupCmd.Flags().StringVar(&dbURI, "db-uri", "", "full database connection URI (overrides individual connection flags)")
 
-	backupCmd.Flags().StringVar(&output, "out", "", "local output path for backup file (defaults to current directory)")
 	backupCmd.Flags().BoolVar(&compress, "compress", true, "compress backup output (default true)")
 	backupCmd.Flags().StringVar(&compressionAlgo, "compression-algo", "lz4", "compression algorithm (gzip, zstd, lz4, none, defaults to lz4). All are wrapped in a tar archive unless 'none' is specified.")
 	backupCmd.Flags().StringVar(&fileName, "name", "", "custom backup file name")

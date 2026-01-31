@@ -35,11 +35,7 @@ and streams it directly into the database engine.`,
 		}
 
 		if target == "" {
-			if output != "" {
-				target = output
-			} else {
-				target = "."
-			}
+			target = "."
 		}
 
 		var notifier notify.Notifier
@@ -159,8 +155,8 @@ func doRestore(cmd *cobra.Command, l *logger.Logger, connParams database.Connect
 		DBType:     connParams.DBType,
 		DBName:     connParams.DBName,
 		StorageURI: target,
-		Compress:   compress,
-		Algorithm:  compressionAlgo,
+		Compress:   true,  // Default to true during restore
+		Algorithm:  "lz4", // Default to lz4
 		FileName:   mName,
 		Logger:     l,
 		Notifier:   notifier,
@@ -231,10 +227,6 @@ func init() {
 	restoreCmd.Flags().StringVar(&dbURI, "db-uri", "", "Full database connection URI (overrides individual flags)")
 	restoreCmd.Flags().BoolVar(&dedupe, "dedupe", true, "Enable storage-level deduplication (CAS, default true)")
 
-	restoreCmd.Flags().StringVar(&storageType, "storage", "", "storage target (local, etc.)")
-	restoreCmd.Flags().StringVar(&output, "out", "", "local directory for backup files")
-	restoreCmd.Flags().BoolVar(&compress, "compress", true, "decompress the backup (default true)")
-	restoreCmd.Flags().StringVar(&compressionAlgo, "compression-algo", "lz4", "compression algorithm used for the backup")
 	restoreCmd.Flags().StringVar(&fileName, "name", "", "backup file name to restore")
 
 	restoreCmd.Flags().BoolVar(&tlsEnabled, "tls", false, "enable TLS/SSL for database connection")
@@ -242,7 +234,7 @@ func init() {
 	restoreCmd.Flags().StringVar(&tlsCACert, "tls-ca-cert", "", "path to CA certificate")
 	restoreCmd.Flags().StringVar(&tlsClientCert, "tls-client-cert", "", "path to client certificate")
 	restoreCmd.Flags().StringVar(&tlsClientKey, "tls-client-key", "", "path to client private key")
-	restoreCmd.Flags().StringVarP(&target, "to", "t", "", "source URI for restore (e.g. sftp://user@host/path)")
+	restoreCmd.Flags().StringVarP(&target, "to", "t", "", "source URI for restore (e.g. user@host/path)")
 	restoreCmd.Flags().StringVarP(&from, "from", "f", "", "unified source URI for restore (alias for --to)")
 	restoreCmd.Flags().BoolVar(&remoteExec, "remote-exec", false, "execute restore tools on the remote storage host (bypasses pg_hba.conf)")
 }

@@ -19,11 +19,7 @@ type BackupManager struct {
 }
 
 func NewBackupManager(opts BackupOptions) (*BackupManager, error) {
-	storageURI := opts.StorageURI
-	if storageURI == "" && opts.OutputDir != "" {
-		storageURI = opts.OutputDir
-	}
-	s, err := storage.FromURI(storageURI)
+	s, err := storage.FromURI(opts.StorageURI)
 	if err != nil {
 		return nil, err
 	}
