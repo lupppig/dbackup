@@ -1,70 +1,99 @@
 # dbackup
 
-`dbackup` is a high-performance, extensible database backup engine designed for security-conscious environments. It provides a unified interface for managing backups across disparate database architectures and storage providers.
+A high-performance, extensible database backup CLI with built-in encryption, scheduling, and remote storage support.
 
-Currently in active development, `dbackup` prioritizes reliability, technical excellence, and seamless integration with modern infrastructure.
+## Features
 
-## Key Capabilities
+- **Multi-Database Support**: PostgreSQL, MySQL, SQLite, Redis
+- **Client-Side Encryption**: AES-256-GCM with PBKDF2 key derivation
+- **Parallel Execution**: Back up multiple databases concurrently (`--parallelism`)
+- **Storage Backends**: Local, SFTP (remote VMs), FTP, Docker volumes
+- **Unified Scheduler**: Cron-style and interval-based recurring backups
+- **Slack Notifications**: Task success/failure alerts via webhook
+- **Integrity Verification**: SHA-256 manifest checksums
 
-- **Unified Interface**: Decoupled architecture using a pluggable adapter system (`DBAdapter`).
-- **Enterprise-Grade Security**: First-class support for SSL/TLS, including mutual TLS (mTLS) for high-security database environments.
-- **Flexible Connectivity**: Support for standard connection parameters and full DSU (Data Source Uniform) URIs.
-- **Stateless Operations**: Designed for containerized environments and scheduled orchestration.
+## Quick Start
 
-## Current Support Matrix
-
-| Feature | Support Status | Target Engine/Driver |
-| :--- | :--- | :--- |
-| **Databases** | Active | PostgreSQL (`lib/pq`) |
-| **Security** | Supported | TLS/SSL, mTLS, Certificate Verification |
-| **Output** | Supported | Local File System |
-| **Roadmap** | Planned | MySQL, MongoDB, S3/Remote Storage |
-
-## Usage Orchestration
-
-### Authentication and Connection
-`dbackup` supports both granular flags and connection URIs. 
-
-#### PostgreSQL via Flags
+### Backup
 ```bash
-./bin/dbackup backup \
-  --db postgres \
-  --host db.example.com \
-  --user admin \
-  --password secret \
-  --dbname production
+# SQLite backup to local directory
+dbackup backup sqlite --db myapp.db --to ./backups
+
+# PostgreSQL backup to remote VM with encryption
+dbackup backup postgres --db-uri "postgres://user:pass@localhost/mydb" \
+  --to user@backup-server:/var/backups \
+  --encrypt --encryption-passphrase "secret"
+
+# Multiple databases in parallel
+dbackup backup postgres://db1 postgres://db2 postgres://db3 --to ./backups --parallelism 3
 ```
 
-#### Secure mTLS Connection
+### Restore
 ```bash
-./bin/dbackup backup \
-  --db postgres \
-  --db-uri "postgres://admin:secret@db.example.com:5432/prod" \
-  --tls \
-  --tls-mode verify-full \
-  --tls-ca-cert /etc/ssl/certs/ca.pem \
-  --tls-client-cert /etc/ssl/client.crt \
-  --tls-client-key /etc/ssl/client.key
+dbackup restore sqlite --from ./backups/myapp.manifest --db restored.db --confirm-restore
 ```
 
-## Engineering and Development
-
-### Testing Philosophy
-The project maintains a rigorous testing suite using `testify` for contract validation and connection string integrity.
-
+### Scheduling
 ```bash
-make test
+# Schedule daily backup at 2 AM (runs in background)
+dbackup schedule backup sqlite --db mydb.db --to user@server:/backups --cron "0 2 * * *" --encrypt
+
+# Schedule hourly backup
+dbackup schedule backup postgres --db-uri "postgres://..." --to ./backups --interval 1h
+
+# List scheduled tasks
+dbackup schedule list
+
+# Remove a scheduled task
+dbackup schedule remove <TASK_ID>
 ```
 
-### Build Requirements
-- Go 1.22 or higher
-- `make` for build automation
+## Security
 
-## Technical Overview
-The project is organized to prioritize separation of concerns:
-- `/cmd`: CLI entry point and flag orchestration (SPF13/Cobra).
-- `/internal/db`: Core database adapter interfaces and engine-specific implementations.
-- `/internal/storage`: Abstraction layer for backup persistence.
+| Feature | Implementation |
+|---------|---------------|
+| Encryption | AES-256-GCM |
+| Key Derivation | PBKDF2 |
+| Integrity | SHA-256 manifests |
+| Secret Handling | Never logged, env var support (`DBACKUP_KEY`) |
+| Restore Safety | Requires `--confirm-restore` |
+
+## Storage Backends
+
+| Backend | URI Format |
+|---------|------------|
+| Local | `./path` or `local://path` |
+| SFTP | `user@host:/path` or `sftp://user@host/path` |
+| FTP | `ftp://user:pass@host/path` (requires `--allow-insecure`) |
+| Docker | `docker://container:/path` |
+
+## Flags
+
+| Flag | Description |
+|------|-------------|
+| `--parallelism` | Number of concurrent backup/restore operations |
+| `--encrypt` | Enable AES-256-GCM encryption |
+| `--encryption-key-file` | Path to 32-byte key file |
+| `--encryption-passphrase` | Passphrase for key derivation |
+| `--cron` | Cron expression for scheduling |
+| `--interval` | Interval for scheduling (e.g., `1h`, `30m`) |
+| `--slack-webhook` | Slack webhook URL for notifications |
+| `--confirm-restore` | Required for restore operations |
+| `--verify` | Verify backup integrity after completion |
+
+## Development
+
+```bash
+# Build
+go build -o dbackup .
+
+# Test
+go test ./...
+
+# Run all tests with verbose output
+go test -v ./...
+```
 
 ## License
-MIT License - Developed and maintained by the `dbackup` contributors.
+
+MIT License

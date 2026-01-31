@@ -69,7 +69,7 @@ and streams it directly into the database engine.`,
 
 		// Otherwise loop over args: manifest[:db-uri] concurrently
 		var wg sync.WaitGroup
-		sem := make(chan struct{}, Concurrency)
+		sem := make(chan struct{}, Parallelism)
 		errChan := make(chan string, len(args))
 
 		for _, arg := range args {

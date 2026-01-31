@@ -35,10 +35,6 @@ func FromURI(uriStr string, opts StorageOptions) (Storage, error) {
 			} else {
 				uriStr = "docker://" + trimmed
 			}
-		} else if strings.HasPrefix(uriStr, "s3:") {
-			uriStr = "s3://" + strings.TrimPrefix(uriStr, "s3:")
-		} else if strings.HasPrefix(uriStr, "gs:") {
-			uriStr = "gs://" + strings.TrimPrefix(uriStr, "gs:")
 		}
 	}
 
@@ -64,10 +60,6 @@ func FromURI(uriStr string, opts StorageOptions) (Storage, error) {
 		return NewFTPStorage(u, opts)
 	case "docker":
 		return NewDockerStorage(u)
-	case "s3":
-		return &S3Storage{Bucket: u.Host, Region: u.Query().Get("region")}, nil
-	case "gs":
-		return &GCSStorage{Bucket: u.Host}, nil
 	case "dedupe":
 		wrapped, err := FromURI(u.Query().Get("target"), opts)
 		if err != nil {

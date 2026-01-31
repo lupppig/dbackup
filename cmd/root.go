@@ -67,7 +67,7 @@ var (
 	dedupe     bool
 
 	SlackWebhook         string
-	Concurrency          int
+	Parallelism          int
 	AllowInsecure        bool
 	encrypt              bool
 	encryptionKeyFile    string
@@ -82,7 +82,7 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&LogJSON, "log-json", false, "output logs in JSON format")
 	rootCmd.PersistentFlags().BoolVar(&NoColor, "no-color", false, "disable colored terminal output")
 	rootCmd.PersistentFlags().StringVar(&SlackWebhook, "slack-webhook", "", "Slack Incoming Webhook URL for notifications")
-	rootCmd.PersistentFlags().IntVar(&Concurrency, "concurrency", 4, "Number of databases to back up/restore simultaneously")
+	rootCmd.PersistentFlags().IntVar(&Parallelism, "parallelism", 4, "Number of databases to back up/restore simultaneously")
 	rootCmd.PersistentFlags().BoolVar(&AllowInsecure, "allow-insecure", false, "Allow insecure protocols (like plain FTP)")
 	rootCmd.PersistentFlags().BoolVar(&encrypt, "encrypt", false, "Enable client-side encryption (AES-256-GCM)")
 	rootCmd.PersistentFlags().StringVar(&encryptionKeyFile, "encryption-key-file", "", "Path to the encryption key file")

@@ -70,7 +70,7 @@ process fails, dbackup exits with a non-zero status code.`,
 			return doBackup(cmd, l, connParams, notifier)
 		}
 		var wg sync.WaitGroup
-		sem := make(chan struct{}, Concurrency)
+		sem := make(chan struct{}, Parallelism)
 		errChan := make(chan string, len(uris))
 
 		for _, uri := range uris {
@@ -217,7 +217,7 @@ func init() {
 	backupCmd.Flags().StringVar(&tlsClientCert, "tls-client-cert", "", "path to client certificate for mutual TLS (mTLS)")
 	backupCmd.Flags().StringVar(&tlsClientKey, "tls-client-key", "", "path to client private key for mutual TLS (mTLS)")
 
-	backupCmd.Flags().StringVarP(&target, "to", "t", "", "unified targeting URI (e.g. sftp://user@host/path, s3://bucket/path, docker://container/path)")
+	backupCmd.Flags().StringVarP(&target, "to", "t", "", "unified targeting URI (e.g. sftp://user@host/path, docker://container/path, ./local/path)")
 	backupCmd.Flags().BoolVar(&remoteExec, "remote-exec", false, "execute backup tools on the remote storage host (bypasses pg_hba.conf)")
 	backupCmd.Flags().BoolVar(&dedupe, "dedupe", true, "Enable storage-level deduplication (CAS, default true)")
 }
