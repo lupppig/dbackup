@@ -61,8 +61,9 @@ func TestAutoDecompression(t *testing.T) {
 	mock := &MockAdapter{}
 
 	opts := backup.BackupOptions{
-		StorageURI: "local://" + tempDir,
-		FileName:   "backup.sql.gz", // No Algorithm or Compress flag set
+		StorageURI:     "local://" + tempDir,
+		FileName:       "backup.sql.gz", // No Algorithm or Compress flag set
+		ConfirmRestore: true,
 	}
 
 	rmgr, err := backup.NewRestoreManager(opts)

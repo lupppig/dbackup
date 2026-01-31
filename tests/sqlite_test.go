@@ -93,10 +93,11 @@ func TestSqliteIntegration(t *testing.T) {
 		backupDir := filepath.Join(tempDir, "backups")
 		restorePath := filepath.Join(tempDir, "restored.db")
 		opts := backup.BackupOptions{
-			StorageURI: "local://" + backupDir,
-			FileName:   "test_backup.db",
-			Compress:   false,
-			Logger:     l,
+			StorageURI:     "local://" + backupDir,
+			FileName:       "test_backup.db",
+			Compress:       false,
+			ConfirmRestore: true,
+			Logger:         l,
 		}
 
 		rmgr, err := backup.NewRestoreManager(opts)

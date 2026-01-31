@@ -8,15 +8,24 @@ import (
 )
 
 type BackupOptions struct {
-	DBType     string
-	DBName     string
-	StorageURI string // Unified targeting URI
-	Compress   bool
-	Algorithm  string
-	FileName   string
-	RemoteExec bool // Force remote execution if storage is remote
-	Logger     *logger.Logger
-	Notifier   notify.Notifier
+	DBType        string
+	DBName        string
+	StorageURI    string // Unified targeting URI
+	Compress      bool
+	Algorithm     string
+	FileName      string
+	RemoteExec    bool // Force remote execution if storage is remote
+	AllowInsecure bool // Allow insecure protocols
+
+	// Encryption
+	Encrypt              bool
+	EncryptionKeyFile    string
+	EncryptionPassphrase string
+
+	ConfirmRestore bool // Explicitly confirm destructive restore
+
+	Logger   *logger.Logger
+	Notifier notify.Notifier
 }
 
 type BackupProcess interface {

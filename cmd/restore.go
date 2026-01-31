@@ -152,14 +152,19 @@ func doRestore(cmd *cobra.Command, l *logger.Logger, connParams database.Connect
 	}
 
 	mgr, err := backup.NewRestoreManager(backup.BackupOptions{
-		DBType:     connParams.DBType,
-		DBName:     connParams.DBName,
-		StorageURI: target,
-		Compress:   true,  // Default to true during restore
-		Algorithm:  "lz4", // Default to lz4
-		FileName:   mName,
-		Logger:     l,
-		Notifier:   notifier,
+		DBType:               connParams.DBType,
+		DBName:               connParams.DBName,
+		StorageURI:           target,
+		Compress:             true,  // Default to true during restore
+		Algorithm:            "lz4", // Default to lz4
+		FileName:             mName,
+		AllowInsecure:        AllowInsecure,
+		Encrypt:              encrypt,
+		EncryptionKeyFile:    encryptionKeyFile,
+		EncryptionPassphrase: encryptionPassphrase,
+		ConfirmRestore:       confirmRestore,
+		Logger:               l,
+		Notifier:             notifier,
 	})
 	if err != nil {
 		return err

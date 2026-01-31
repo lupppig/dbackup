@@ -3,6 +3,7 @@ package storage
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/url"
 	"path/filepath"
@@ -18,7 +19,10 @@ type FTPStorage struct {
 	host       string
 }
 
-func NewFTPStorage(u *url.URL) (*FTPStorage, error) {
+func NewFTPStorage(u *url.URL, opts StorageOptions) (*FTPStorage, error) {
+	if !opts.AllowInsecure {
+		return nil, fmt.Errorf("insecure protocol FTP requires explicit opt-in with --allow-insecure")
+	}
 	user := u.User.Username()
 	pass, _ := u.User.Password()
 	host := u.Host

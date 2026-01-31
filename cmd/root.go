@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -19,6 +20,9 @@ var rootCmd = &cobra.Command{
 		return cmd.Help()
 	},
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		if encryptionPassphrase == "" {
+			encryptionPassphrase = os.Getenv("DBACKUP_KEY")
+		}
 		return nil
 	},
 	SilenceUsage:  true,
@@ -62,8 +66,13 @@ var (
 	remoteExec bool
 	dedupe     bool
 
-	SlackWebhook string
-	Concurrency  int
+	SlackWebhook         string
+	Concurrency          int
+	AllowInsecure        bool
+	encrypt              bool
+	encryptionKeyFile    string
+	encryptionPassphrase string
+	confirmRestore       bool
 )
 
 func init() {
@@ -74,6 +83,11 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&NoColor, "no-color", false, "disable colored terminal output")
 	rootCmd.PersistentFlags().StringVar(&SlackWebhook, "slack-webhook", "", "Slack Incoming Webhook URL for notifications")
 	rootCmd.PersistentFlags().IntVar(&Concurrency, "concurrency", 4, "Number of databases to back up/restore simultaneously")
+	rootCmd.PersistentFlags().BoolVar(&AllowInsecure, "allow-insecure", false, "Allow insecure protocols (like plain FTP)")
+	rootCmd.PersistentFlags().BoolVar(&encrypt, "encrypt", false, "Enable client-side encryption (AES-256-GCM)")
+	rootCmd.PersistentFlags().StringVar(&encryptionKeyFile, "encryption-key-file", "", "Path to the encryption key file")
+	rootCmd.PersistentFlags().StringVar(&encryptionPassphrase, "encryption-passphrase", "", "Passphrase for encryption key derivation")
+	rootCmd.PersistentFlags().BoolVar(&confirmRestore, "confirm-restore", false, "Confirm destructive restore operations")
 }
 
 func Execute() error {

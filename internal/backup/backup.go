@@ -2,13 +2,17 @@ package backup
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"strings"
 	"time"
 
 	"github.com/lupppig/dbackup/internal/compress"
+	"github.com/lupppig/dbackup/internal/crypto"
 	database "github.com/lupppig/dbackup/internal/db"
+	"github.com/lupppig/dbackup/internal/manifest"
 	"github.com/lupppig/dbackup/internal/notify"
 	"github.com/lupppig/dbackup/internal/storage"
 )
@@ -19,7 +23,9 @@ type BackupManager struct {
 }
 
 func NewBackupManager(opts BackupOptions) (*BackupManager, error) {
-	s, err := storage.FromURI(opts.StorageURI)
+	s, err := storage.FromURI(opts.StorageURI, storage.StorageOptions{
+		AllowInsecure: opts.AllowInsecure,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -111,8 +117,23 @@ func (m *BackupManager) Run(ctx context.Context, adapter database.DBAdapter, con
 		defer pw.Close()
 		var w io.Writer = pw
 
+		if m.Options.Encrypt {
+			km, err := crypto.NewKeyManager(m.Options.EncryptionPassphrase, m.Options.EncryptionKeyFile)
+			if err != nil {
+				errChan <- err
+				return
+			}
+			ew, err := crypto.NewEncryptWriter(pw, km)
+			if err != nil {
+				errChan <- err
+				return
+			}
+			defer ew.Close()
+			w = ew
+		}
+
 		if m.Options.Compress {
-			c, err := compress.New(pw, algo)
+			c, err := compress.New(w, algo)
 			if err != nil {
 				errChan <- err
 				return
@@ -141,13 +162,38 @@ func (m *BackupManager) Run(ctx context.Context, adapter database.DBAdapter, con
 		errChan <- nil
 	}()
 
-	location, err := m.storage.Save(ctx, finalName, pr)
+	// Integrity & Manifesting
+	hasher := sha256.New()
+	tr := io.TeeReader(pr, hasher)
+
+	location, err := m.storage.Save(ctx, finalName, tr)
 	if err != nil {
 		return fmt.Errorf("storage save failed: %w", err)
 	}
 
 	if err := <-errChan; err != nil {
 		return err
+	}
+
+	checksum := hex.EncodeToString(hasher.Sum(nil))
+
+	encryption := "none"
+	if m.Options.Encrypt {
+		encryption = "aes-256-gcm"
+	}
+
+	man := manifest.New(
+		fmt.Sprintf("%x", time.Now().UnixNano()),
+		conn.DBType,
+		string(algo),
+		encryption,
+	)
+	man.Checksum = checksum
+	man.Version = "0.1.0"
+
+	manBytes, err := man.Serialize()
+	if err == nil {
+		_ = m.storage.PutMetadata(ctx, finalName+".manifest", manBytes)
 	}
 
 	if m.Options.Logger != nil {

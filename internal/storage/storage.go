@@ -9,7 +9,11 @@ import (
 	"strings"
 )
 
-func FromURI(uriStr string) (Storage, error) {
+type StorageOptions struct {
+	AllowInsecure bool
+}
+
+func FromURI(uriStr string, opts StorageOptions) (Storage, error) {
 	if uriStr == "" {
 		return NewLocalStorage(""), nil
 	}
@@ -54,10 +58,10 @@ func FromURI(uriStr string) (Storage, error) {
 			path = filepath.Join(u.Host, path)
 		}
 		return NewLocalStorage(path), nil
-	case "sftp", "ssh":
+	case "ssh", "sftp":
 		return NewSSHStorage(u)
 	case "ftp":
-		return NewFTPStorage(u)
+		return NewFTPStorage(u, opts)
 	case "docker":
 		return NewDockerStorage(u)
 	case "s3":
@@ -65,7 +69,7 @@ func FromURI(uriStr string) (Storage, error) {
 	case "gs":
 		return &GCSStorage{Bucket: u.Host}, nil
 	case "dedupe":
-		wrapped, err := FromURI(u.Query().Get("target"))
+		wrapped, err := FromURI(u.Query().Get("target"), opts)
 		if err != nil {
 			return nil, err
 		}

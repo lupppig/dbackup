@@ -69,8 +69,6 @@ process fails, dbackup exits with a non-zero status code.`,
 			}
 			return doBackup(cmd, l, connParams, notifier)
 		}
-
-		// Otherwise, loop over URIs concurrently
 		var wg sync.WaitGroup
 		sem := make(chan struct{}, Concurrency)
 		errChan := make(chan string, len(uris))
@@ -128,15 +126,19 @@ func doBackup(cmd *cobra.Command, l *logger.Logger, connParams database.Connecti
 	}
 
 	mgr, err := backup.NewBackupManager(backup.BackupOptions{
-		DBType:     connParams.DBType,
-		DBName:     connParams.DBName,
-		StorageURI: target,
-		Compress:   compress,
-		Algorithm:  compressionAlgo,
-		FileName:   fileName,
-		RemoteExec: remoteExec,
-		Logger:     l,
-		Notifier:   notifier,
+		DBType:               connParams.DBType,
+		DBName:               connParams.DBName,
+		StorageURI:           target,
+		Compress:             compress,
+		Algorithm:            compressionAlgo,
+		FileName:             fileName,
+		RemoteExec:           remoteExec,
+		AllowInsecure:        AllowInsecure,
+		Encrypt:              encrypt,
+		EncryptionKeyFile:    encryptionKeyFile,
+		EncryptionPassphrase: encryptionPassphrase,
+		Logger:               l,
+		Notifier:             notifier,
 	})
 	if err != nil {
 		return err

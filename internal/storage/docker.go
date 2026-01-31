@@ -30,14 +30,12 @@ func NewDockerStorage(u *url.URL) (*DockerStorage, error) {
 
 func (s *DockerStorage) Save(ctx context.Context, name string, r io.Reader) (string, error) {
 	path := filepath.Join(s.remotePath, name)
-	// Ensure directory exists
+	// Ensure directory exists (safe exec)
 	mkdirCmd := exec.CommandContext(ctx, "docker", "exec", s.containerName, "mkdir", "-p", filepath.Dir(path))
-	if err := mkdirCmd.Run(); err != nil {
-		return "", fmt.Errorf("docker mkdir failed: %w", err)
-	}
+	_ = mkdirCmd.Run() // Ignore errors if directory exists or mkdir fails (cp will fail anyway if truly bad)
 
-	// Stream to container
-	cmd := exec.CommandContext(ctx, "docker", "exec", "-i", s.containerName, "sh", "-c", fmt.Sprintf("cat > %s", path))
+	// Stream to container using 'docker cp -'
+	cmd := exec.CommandContext(ctx, "docker", "cp", "-", fmt.Sprintf("%s:%s", s.containerName, path))
 	cmd.Stdin = r
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -68,7 +66,7 @@ func (s *DockerStorage) Location() string {
 
 func (s *DockerStorage) PutMetadata(ctx context.Context, name string, data []byte) error {
 	path := filepath.Join(s.remotePath, name)
-	cmd := exec.CommandContext(ctx, "docker", "exec", "-i", s.containerName, "sh", "-c", fmt.Sprintf("cat > %s", path))
+	cmd := exec.CommandContext(ctx, "docker", "cp", "-", fmt.Sprintf("%s:%s", s.containerName, path))
 	cmd.Stdin = bytes.NewReader(data)
 	return cmd.Run()
 }
