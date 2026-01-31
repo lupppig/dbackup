@@ -50,7 +50,10 @@ func TestSqliteIntegration(t *testing.T) {
 	l := logger.New(logger.Config{NoColor: true})
 	sa := &db.SqliteAdapter{Logger: l}
 	ctx := context.Background()
-	connParams := db.ConnectionParams{DBUri: dbPath}
+	connParams := db.ConnectionParams{
+		DBType: "sqlite",
+		DBUri:  dbPath,
+	}
 
 	t.Run("TestConnection", func(t *testing.T) {
 		err := sa.TestConnection(ctx, connParams, &db.LocalRunner{})
@@ -99,7 +102,10 @@ func TestSqliteIntegration(t *testing.T) {
 		rmgr, err := backup.NewRestoreManager(opts)
 		require.NoError(t, err)
 
-		restoreConnParams := db.ConnectionParams{DBUri: restorePath}
+		restoreConnParams := db.ConnectionParams{
+			DBType: "sqlite",
+			DBUri:  restorePath,
+		}
 		err = rmgr.Run(ctx, sa, restoreConnParams)
 		assert.NoError(t, err)
 

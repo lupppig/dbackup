@@ -43,26 +43,35 @@ func (sq *SqliteAdapter) TestConnection(ctx context.Context, connParams Connecti
 }
 
 func (sq *SqliteAdapter) BuildConnection(ctx context.Context, connParams ConnectionParams) (string, error) {
-	if connParams.DBName == "" {
+	path := connParams.DBName
+	if path == "" && connParams.DBUri != "" {
+		path = connParams.DBUri
+	}
+
+	if path == "" {
 		return "", fmt.Errorf("sqlite DB path is empty")
 	}
-	return connParams.DBName, nil
+	return path, nil
 }
 
 func (sq *SqliteAdapter) RunBackup(ctx context.Context, conn ConnectionParams, runner Runner, w io.Writer) error {
+	path, err := sq.BuildConnection(ctx, conn)
+	if err != nil {
+		return err
+	}
 	if sq.Logger != nil {
-		sq.Logger.Info("Starting SQLite backup...", "path", conn.DBName)
+		sq.Logger.Info("Starting SQLite backup...", "path", path)
 	}
 
-	return sq.runFullBackup(ctx, conn, runner, w)
+	return sq.runFullBackup(ctx, path, runner, w)
 }
 
-func (sq *SqliteAdapter) runFullBackup(ctx context.Context, conn ConnectionParams, runner Runner, w io.Writer) error {
+func (sq *SqliteAdapter) runFullBackup(ctx context.Context, path string, runner Runner, w io.Writer) error {
 	if _, ok := runner.(*LocalRunner); !ok && runner != nil {
-		return runner.Run(ctx, "cat", []string{conn.DBName}, w)
+		return runner.Run(ctx, "cat", []string{path}, w)
 	}
 
-	srcFile, err := os.Open(conn.DBName)
+	srcFile, err := os.Open(path)
 	if err != nil {
 		return err
 	}
@@ -73,12 +82,16 @@ func (sq *SqliteAdapter) runFullBackup(ctx context.Context, conn ConnectionParam
 }
 
 func (sq *SqliteAdapter) RunRestore(ctx context.Context, conn ConnectionParams, runner Runner, r io.Reader) error {
-	sq.Logger.Info("restoring sqlite database...", "path", conn.DBName)
-	return sq.runFullRestore(ctx, conn, r)
+	path, err := sq.BuildConnection(ctx, conn)
+	if err != nil {
+		return err
+	}
+	sq.Logger.Info("restoring sqlite database...", "path", path)
+	return sq.runFullRestore(ctx, path, r)
 }
 
-func (sq *SqliteAdapter) runFullRestore(ctx context.Context, conn ConnectionParams, r io.Reader) error {
-	dstFile, err := os.Create(conn.DBName)
+func (sq *SqliteAdapter) runFullRestore(ctx context.Context, path string, r io.Reader) error {
+	dstFile, err := os.Create(path)
 	if err != nil {
 		return err
 	}
