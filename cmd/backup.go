@@ -33,13 +33,30 @@ process fails, dbackup exits with a non-zero status code.`,
 
 		var uris []string
 		if len(args) > 0 {
-			uris = args
+			// Check if first arg is an engine type
+			firstArg := strings.ToLower(args[0])
+			isEngine := false
+			switch firstArg {
+			case "postgres", "postgresql", "mysql", "sqlite":
+				isEngine = true
+			}
+
+			if isEngine {
+				dbType = firstArg
+				uris = args[1:]
+			} else {
+				uris = args
+			}
 		} else if dbURI != "" {
 			uris = []string{dbURI}
 		}
 
-		if len(uris) == 0 && dbType == "" {
-			return fmt.Errorf("at least one database URI or --db flag is required")
+		if len(uris) == 0 && dbName == "" {
+			return fmt.Errorf("database name or URI is required")
+		}
+
+		if dbType == "" {
+			return fmt.Errorf("database engine is required (e.g. backup sqlite ...)")
 		}
 
 		var notifier notify.Notifier
@@ -84,7 +101,13 @@ process fails, dbackup exits with a non-zero status code.`,
 				subL := l.With("uri", storagepkg.Scrub(u))
 
 				connParams := database.ConnectionParams{
-					DBUri: u,
+					DBType:   dbType,
+					Host:     host,
+					Port:     port,
+					User:     user,
+					Password: password,
+					DBName:   dbName,
+					DBUri:    u,
 					TLS: database.TLSConfig{
 						Enabled:    tlsEnabled,
 						Mode:       tlsMode,
@@ -196,28 +219,7 @@ func doBackup(cmd *cobra.Command, l *logger.Logger, connParams database.Connecti
 func init() {
 	rootCmd.AddCommand(backupCmd)
 
-	backupCmd.Flags().StringVar(&config, "config", "", "path to configuration file")
-
-	backupCmd.Flags().StringVar(&dbType, "db", "", "database engine (postgres, mysql, sqlite, mongodb)")
-	backupCmd.Flags().StringVar(&host, "host", "", "database host")
-	backupCmd.Flags().StringVar(&user, "user", "", "database username")
-	backupCmd.Flags().StringVar(&password, "password", "", "database password")
-	backupCmd.Flags().StringVar(&dbName, "dbname", "", "database name")
-	backupCmd.Flags().IntVar(&port, "port", 0, "database ports to be provided")
-
-	backupCmd.Flags().StringVar(&dbURI, "db-uri", "", "full database connection URI (overrides individual connection flags)")
-
 	backupCmd.Flags().BoolVar(&compress, "compress", true, "compress backup output (default true)")
 	backupCmd.Flags().StringVar(&compressionAlgo, "compression-algo", "lz4", "compression algorithm (gzip, zstd, lz4, none, defaults to lz4). All are wrapped in a tar archive unless 'none' is specified.")
 	backupCmd.Flags().StringVar(&fileName, "name", "", "custom backup file name")
-
-	backupCmd.Flags().BoolVar(&tlsEnabled, "tls", false, "enable TLS/SSL for database connection")
-	backupCmd.Flags().StringVar(&tlsMode, "tls-mode", "disable", "TLS mode (disable, require, verify-ca, verify-full)")
-	backupCmd.Flags().StringVar(&tlsCACert, "tls-ca-cert", "", "path to CA certificate for TLS verification")
-	backupCmd.Flags().StringVar(&tlsClientCert, "tls-client-cert", "", "path to client certificate for mutual TLS (mTLS)")
-	backupCmd.Flags().StringVar(&tlsClientKey, "tls-client-key", "", "path to client private key for mutual TLS (mTLS)")
-
-	backupCmd.Flags().StringVarP(&target, "to", "t", "", "unified targeting URI (e.g. sftp://user@host/path, docker://container/path, ./local/path)")
-	backupCmd.Flags().BoolVar(&remoteExec, "remote-exec", false, "execute backup tools on the remote storage host (bypasses pg_hba.conf)")
-	backupCmd.Flags().BoolVar(&dedupe, "dedupe", true, "Enable storage-level deduplication (CAS, default true)")
 }

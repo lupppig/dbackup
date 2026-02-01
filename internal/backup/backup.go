@@ -30,6 +30,11 @@ func NewBackupManager(opts BackupOptions) (*BackupManager, error) {
 		return nil, err
 	}
 
+	// Wrap with dedupe storage for incremental backups
+	if opts.Dedupe {
+		s = storage.NewDedupeStorage(s)
+	}
+
 	return &BackupManager{
 		Options: opts,
 		storage: s,
@@ -188,6 +193,7 @@ func (m *BackupManager) Run(ctx context.Context, adapter database.DBAdapter, con
 		string(algo),
 		encryption,
 	)
+	man.DBName = conn.DBName
 	man.Checksum = checksum
 	man.Version = "0.1.0"
 

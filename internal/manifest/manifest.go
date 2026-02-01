@@ -12,11 +12,14 @@ type Manifest struct {
 	ID          string    `json:"id"`
 	ParentID    string    `json:"parent_id,omitempty"`
 	Engine      string    `json:"engine"`
+	DBName      string    `json:"dbname,omitempty"`
+	Timestamp   string    `json:"timestamp,omitempty"`
 	Version     string    `json:"version"`
-	Checksum    string    `json:"checksum"` // SHA-256 of the stored blob
-	Compression string    `json:"compression"`
-	Encryption  string    `json:"encryption"`
+	Checksum    string    `json:"checksum,omitempty"` // SHA-256 of the stored blob
+	Compression string    `json:"compression,omitempty"`
+	Encryption  string    `json:"encryption,omitempty"`
 	CreatedAt   time.Time `json:"created_at"`
+	Chunks      []string  `json:"chunks,omitempty"` // SHA-256 hashes for dedupe
 }
 
 func New(id, engine, compression, encryption string) *Manifest {
@@ -41,7 +44,6 @@ func Deserialize(data []byte) (*Manifest, error) {
 	return &m, nil
 }
 
-// CalculateChecksum computes the SHA-256 of a stream
 func CalculateChecksum(r io.Reader) (string, error) {
 	h := sha256.New()
 	if _, err := io.Copy(h, r); err != nil {

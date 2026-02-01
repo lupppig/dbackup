@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -8,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/lupppig/dbackup/internal/compress"
@@ -77,7 +79,11 @@ func (m *RestoreManager) Run(ctx context.Context, adapter database.DBAdapter, co
 
 	// Integrity & Manifesting Logic
 	// Step 1: Read Manifest
-	manBytes, err := m.storage.GetMetadata(ctx, name+".manifest")
+	manPath := name
+	if !strings.HasSuffix(name, ".manifest") {
+		manPath = name + ".manifest"
+	}
+	manBytes, err := m.storage.GetMetadata(ctx, manPath)
 	if err != nil {
 		if m.Options.Logger != nil {
 			m.Options.Logger.Warn("Manifest not found for backup, skipping integrity check", "file", name)
@@ -97,6 +103,9 @@ func (m *RestoreManager) Run(ctx context.Context, adapter database.DBAdapter, co
 	defer os.RemoveAll(tmpDir)
 
 	tmpFile := filepath.Join(tmpDir, name)
+	if err := os.MkdirAll(filepath.Dir(tmpFile), 0755); err != nil {
+		return fmt.Errorf("failed to create temp directory: %w", err)
+	}
 	f, err := os.Create(tmpFile)
 	if err != nil {
 		return fmt.Errorf("failed to create temp file: %w", err)
@@ -142,7 +151,37 @@ func (m *RestoreManager) Run(ctx context.Context, adapter database.DBAdapter, co
 
 	var finalReader io.Reader = f
 
-	if m.Options.Encrypt {
+	// Smart Detection
+	actualEncrypt := m.Options.Encrypt
+	actualAlgo := compress.Algorithm(m.Options.Algorithm)
+
+	if man != nil {
+		if man.Encryption != "" && man.Encryption != "none" {
+			actualEncrypt = true
+		}
+		if man.Compression != "" && man.Compression != "none" {
+			actualAlgo = compress.Algorithm(man.Compression)
+		}
+	}
+
+	// Sniff for encryption magic "DBKP"
+	header := make([]byte, 4)
+	n, _ := io.ReadAtLeast(finalReader, header, 4)
+	if n == 4 && string(header) == crypto.MagicBytes {
+		actualEncrypt = true
+	}
+	// Put the header back
+	finalReader = io.MultiReader(bytes.NewReader(header[:n]), finalReader)
+
+	if actualEncrypt {
+		if m.Options.EncryptionPassphrase == "" && m.Options.EncryptionKeyFile == "" {
+			// Try environment variable
+			if pass := os.Getenv("DBACKUP_KEY"); pass != "" {
+				m.Options.EncryptionPassphrase = pass
+			} else {
+				return fmt.Errorf("backup is encrypted but no passphrase or key-file was provided (set DBACKUP_KEY env var)")
+			}
+		}
 		km, err := crypto.NewKeyManager(m.Options.EncryptionPassphrase, m.Options.EncryptionKeyFile)
 		if err != nil {
 			return err
@@ -151,17 +190,16 @@ func (m *RestoreManager) Run(ctx context.Context, adapter database.DBAdapter, co
 		finalReader = dr
 	}
 
-	// Handle decompression if requested/detected
-	algo := compress.Algorithm(m.Options.Algorithm)
-	if algo == "" || algo == compress.None {
-		// Auto-detect from filename
-		algo = compress.DetectAlgorithm(name)
+	// Handle decompression
+	if actualAlgo == "" || actualAlgo == compress.None {
+		// Auto-detect from filename if still unknown
+		actualAlgo = compress.DetectAlgorithm(name)
 	}
 
-	if algo != compress.None {
-		c, err := compress.NewReader(finalReader, algo)
+	if actualAlgo != compress.None {
+		c, err := compress.NewReader(finalReader, actualAlgo)
 		if err != nil {
-			return fmt.Errorf("failed to create decompression reader for %s: %w", algo, err)
+			return fmt.Errorf("failed to create decompression reader for %s: %w", actualAlgo, err)
 		}
 		defer c.Close()
 		finalReader = c

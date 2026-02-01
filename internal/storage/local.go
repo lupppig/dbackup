@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type LocalStorage struct {
@@ -56,6 +57,45 @@ func (s *LocalStorage) PutMetadata(ctx context.Context, name string, data []byte
 func (s *LocalStorage) GetMetadata(ctx context.Context, name string) ([]byte, error) {
 	path := filepath.Join(s.baseDir, name)
 	return os.ReadFile(path)
+}
+
+func (s *LocalStorage) ListMetadata(ctx context.Context, prefix string) ([]string, error) {
+	searchDir := s.baseDir
+	basePrefix := prefix
+
+	if strings.Contains(prefix, "/") {
+		if strings.HasSuffix(prefix, "/") {
+			searchDir = filepath.Join(s.baseDir, prefix)
+			basePrefix = ""
+		} else {
+			searchDir = filepath.Join(s.baseDir, filepath.Dir(prefix))
+			basePrefix = filepath.Base(prefix)
+		}
+	}
+
+	entries, err := os.ReadDir(searchDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	var files []string
+	for _, entry := range entries {
+		if !entry.IsDir() && (basePrefix == "" || strings.HasPrefix(entry.Name(), basePrefix)) {
+			relDir := ""
+			if strings.Contains(prefix, "/") {
+				if strings.HasSuffix(prefix, "/") {
+					relDir = prefix
+				} else {
+					relDir = filepath.Dir(prefix) + "/"
+				}
+			}
+			files = append(files, relDir+entry.Name())
+		}
+	}
+	return files, nil
 }
 
 func (s *LocalStorage) Location() string {

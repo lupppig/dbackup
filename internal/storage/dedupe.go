@@ -8,14 +8,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
-)
+	"time"
 
-type Manifest struct {
-	Engine    string   `json:"engine"`
-	Timestamp string   `json:"timestamp"`
-	Chunks    []string `json:"chunks"` // SHA-256 hashes
-}
+	"github.com/lupppig/dbackup/internal/manifest"
+)
 
 type DedupeStorage struct {
 	inner Storage
@@ -42,7 +40,6 @@ func (s *DedupeStorage) Save(ctx context.Context, name string, r io.Reader) (str
 		hashStr := hex.EncodeToString(hash[:])
 		chunkHashes = append(chunkHashes, hashStr)
 
-		// Check if chunk exists
 		chunkPath := "chunks/" + hashStr
 		r, err := s.inner.Open(ctx, chunkPath)
 		if err == nil {
@@ -57,13 +54,27 @@ func (s *DedupeStorage) Save(ctx context.Context, name string, r io.Reader) (str
 		}
 	}
 
-	manifest := Manifest{
-		Engine:    strings.Split(name, "-")[0],
-		Timestamp: name,
-		Chunks:    chunkHashes,
+	baseName := filepath.Base(name)
+	engine := strings.Split(baseName, "-")[0]
+	dbName := ""
+	if strings.Contains(baseName, "-") {
+		parts := strings.Split(baseName, "-")
+		if len(parts) > 1 {
+			dbName = parts[1]
+		}
 	}
 
-	manifestData, err := json.Marshal(manifest)
+	m := manifest.Manifest{
+		ID:        fmt.Sprintf("%x", time.Now().UnixNano()),
+		Engine:    engine,
+		DBName:    dbName,
+		Timestamp: name,
+		CreatedAt: time.Now(),
+		Chunks:    chunkHashes,
+		Version:   "0.1.0",
+	}
+
+	manifestData, err := json.Marshal(m)
 	if err != nil {
 		return "", err
 	}
@@ -88,8 +99,8 @@ func (s *DedupeStorage) Open(ctx context.Context, name string) (io.ReadCloser, e
 		return nil, fmt.Errorf("manifest not found: %w", err)
 	}
 
-	var m Manifest
-	if err := json.Unmarshal(data, &m); err != nil {
+	m, err := manifest.Deserialize(data)
+	if err != nil {
 		return nil, err
 	}
 
@@ -124,6 +135,10 @@ func (s *DedupeStorage) PutMetadata(ctx context.Context, name string, data []byt
 
 func (s *DedupeStorage) GetMetadata(ctx context.Context, name string) ([]byte, error) {
 	return s.inner.GetMetadata(ctx, name)
+}
+
+func (s *DedupeStorage) ListMetadata(ctx context.Context, prefix string) ([]string, error) {
+	return s.inner.ListMetadata(ctx, prefix)
 }
 
 type multiReadCloser struct {

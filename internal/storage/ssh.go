@@ -30,8 +30,13 @@ func NewSSHStorage(u *url.URL) (*SSHStorage, error) {
 		host = host + ":22"
 	}
 
+	remotePath := u.Path
+	if strings.HasPrefix(remotePath, "/./") {
+		remotePath = strings.TrimPrefix(remotePath, "/./")
+	}
+
 	return &SSHStorage{
-		remotePath: u.Path,
+		remotePath: remotePath,
 		host:       host,
 		user:       u.User,
 	}, nil
@@ -107,12 +112,12 @@ func (s *SSHStorage) Save(ctx context.Context, name string, r io.Reader) (string
 	}
 	path := filepath.Join(s.remotePath, name)
 	if err := s.sftpClient.MkdirAll(filepath.Dir(path)); err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to create remote directory %s: %w", filepath.Dir(path), err)
 	}
 
 	f, err := s.sftpClient.Create(path)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to create remote file %s: %w", path, err)
 	}
 	defer f.Close()
 
@@ -139,11 +144,11 @@ func (s *SSHStorage) PutMetadata(ctx context.Context, name string, data []byte) 
 	}
 	path := filepath.Join(s.remotePath, name)
 	if err := s.sftpClient.MkdirAll(filepath.Dir(path)); err != nil {
-		return err
+		return fmt.Errorf("failed to create remote directory %s: %w", filepath.Dir(path), err)
 	}
 	f, err := s.sftpClient.Create(path)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create remote file %s: %w", path, err)
 	}
 	defer f.Close()
 	_, err = f.Write(data)
@@ -161,6 +166,45 @@ func (s *SSHStorage) GetMetadata(ctx context.Context, name string) ([]byte, erro
 	}
 	defer f.Close()
 	return io.ReadAll(f)
+}
+
+func (s *SSHStorage) ListMetadata(ctx context.Context, prefix string) ([]string, error) {
+	if err := s.connect(); err != nil {
+		return nil, err
+	}
+	searchDir := s.remotePath
+	basePrefix := prefix
+
+	if strings.Contains(prefix, "/") {
+		if strings.HasSuffix(prefix, "/") {
+			searchDir = filepath.Join(s.remotePath, prefix)
+			basePrefix = ""
+		} else {
+			searchDir = filepath.Join(s.remotePath, filepath.Dir(prefix))
+			basePrefix = filepath.Base(prefix)
+		}
+	}
+
+	entries, err := s.sftpClient.ReadDir(searchDir)
+	if err != nil {
+		return nil, nil // Assume dir doesn't exist
+	}
+
+	var files []string
+	for _, entry := range entries {
+		if !entry.IsDir() && (basePrefix == "" || strings.HasPrefix(entry.Name(), basePrefix)) {
+			relDir := ""
+			if strings.Contains(prefix, "/") {
+				if strings.HasSuffix(prefix, "/") {
+					relDir = prefix
+				} else {
+					relDir = filepath.Dir(prefix) + "/"
+				}
+			}
+			files = append(files, relDir+entry.Name())
+		}
+	}
+	return files, nil
 }
 
 func (s *SSHStorage) Close() error {

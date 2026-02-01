@@ -25,9 +25,12 @@ go.work
 go.work.sum
 
 # env fileo
-
+*.sql
+*.db
+.db
+*.dbk
 .env
-
+*.sqlite
 # Editor/IDE
 # .idea/
 # .vscode/

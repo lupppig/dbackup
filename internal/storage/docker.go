@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/lupppig/dbackup/internal/db"
 )
@@ -75,6 +76,48 @@ func (s *DockerStorage) GetMetadata(ctx context.Context, name string) ([]byte, e
 	path := filepath.Join(s.remotePath, name)
 	cmd := exec.CommandContext(ctx, "docker", "exec", s.containerName, "cat", path)
 	return cmd.Output()
+}
+
+func (s *DockerStorage) ListMetadata(ctx context.Context, prefix string) ([]string, error) {
+	searchDir := s.remotePath
+	basePrefix := prefix
+
+	if strings.Contains(prefix, "/") {
+		if strings.HasSuffix(prefix, "/") {
+			searchDir = filepath.Join(s.remotePath, prefix)
+			basePrefix = ""
+		} else {
+			searchDir = filepath.Join(s.remotePath, filepath.Dir(prefix))
+			basePrefix = filepath.Base(prefix)
+		}
+	}
+
+	cmd := exec.CommandContext(ctx, "docker", "exec", s.containerName, "ls", "-1", searchDir)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, nil // Assume dir doesn't exist
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	var files []string
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if basePrefix == "" || strings.HasPrefix(line, basePrefix) {
+			relDir := ""
+			if strings.Contains(prefix, "/") {
+				if strings.HasSuffix(prefix, "/") {
+					relDir = prefix
+				} else {
+					relDir = filepath.Dir(prefix) + "/"
+				}
+			}
+			files = append(files, relDir+line)
+		}
+	}
+	return files, nil
 }
 
 // Runner implementation

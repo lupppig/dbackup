@@ -22,9 +22,19 @@ func FromURI(uriStr string, opts StorageOptions) (Storage, error) {
 		if strings.Contains(uriStr, "@") {
 			if strings.Contains(uriStr, ":") {
 				parts := strings.SplitN(uriStr, ":", 2)
-				uriStr = "sftp://" + parts[0] + "/" + strings.TrimPrefix(parts[1], "/")
+				if strings.HasPrefix(parts[1], "/") {
+					uriStr = "sftp://" + parts[0] + parts[1]
+				} else {
+					uriStr = "sftp://" + parts[0] + "/./" + parts[1]
+				}
 			} else {
-				uriStr = "sftp://" + uriStr
+				// Ambiguous: user@host/path. Treat as relative for convenience.
+				if strings.Contains(uriStr, "/") {
+					parts := strings.SplitN(uriStr, "/", 2)
+					uriStr = "sftp://" + parts[0] + "/./" + parts[1]
+				} else {
+					uriStr = "sftp://" + uriStr
+				}
 			}
 		} else if strings.HasPrefix(uriStr, "docker:") {
 			// Inferred Docker: docker:container[:path]
@@ -102,4 +112,5 @@ type Storage interface {
 	// Metadata support
 	PutMetadata(ctx context.Context, name string, data []byte) error
 	GetMetadata(ctx context.Context, name string) ([]byte, error)
+	ListMetadata(ctx context.Context, prefix string) ([]string, error)
 }

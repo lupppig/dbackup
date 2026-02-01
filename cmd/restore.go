@@ -10,9 +10,14 @@ import (
 	"github.com/lupppig/dbackup/internal/backup"
 	database "github.com/lupppig/dbackup/internal/db"
 	"github.com/lupppig/dbackup/internal/logger"
+	"github.com/lupppig/dbackup/internal/manifest"
 	"github.com/lupppig/dbackup/internal/notify"
 	"github.com/lupppig/dbackup/internal/storage"
 	"github.com/spf13/cobra"
+)
+
+var (
+	restoreAll bool
 )
 
 var restoreCmd = &cobra.Command{
@@ -41,6 +46,125 @@ and streams it directly into the database engine.`,
 		var notifier notify.Notifier
 		if SlackWebhook != "" {
 			notifier = notify.NewSlackNotifier(SlackWebhook)
+		}
+
+		// Handle positional engine for restore
+		if len(args) > 0 {
+			firstArg := strings.ToLower(args[0])
+			switch firstArg {
+			case "postgres", "postgresql", "mysql", "sqlite":
+				dbType = firstArg
+				args = args[1:]
+			}
+		}
+
+		if restoreAll {
+			if len(args) > 0 {
+				return fmt.Errorf("extra arguments provided with --all: %v", args)
+			}
+			l.Info("Scanning for all backups to restore...", "target", target)
+
+			s, err := storage.FromURI(target, storage.StorageOptions{AllowInsecure: AllowInsecure})
+			if err != nil {
+				return err
+			}
+
+			if dedupe {
+				s = storage.NewDedupeStorage(s)
+			}
+
+			files, err := s.ListMetadata(cmd.Context(), "backups/")
+			if err != nil {
+				return fmt.Errorf("failed to list manifests: %w", err)
+			}
+
+			latestBackups := make(map[string]*struct {
+				Manifest *manifest.Manifest
+				Path     string
+			})
+
+			for _, file := range files {
+				if !strings.HasSuffix(file, ".manifest") {
+					continue
+				}
+
+				data, err := s.GetMetadata(cmd.Context(), file)
+				if err != nil {
+					l.Warn("Failed to read manifest", "file", file, "error", err)
+					continue
+				}
+
+				m, err := manifest.Deserialize(data)
+				if err != nil {
+					l.Warn("Failed to parse manifest", "file", file, "error", err)
+					continue
+				}
+
+				key := fmt.Sprintf("%s:%s", m.Engine, m.DBName)
+				if current, ok := latestBackups[key]; !ok || m.CreatedAt.After(current.Manifest.CreatedAt) {
+					latestBackups[key] = &struct {
+						Manifest *manifest.Manifest
+						Path     string
+					}{m, file}
+				}
+			}
+
+			if len(latestBackups) == 0 {
+				l.Info("No manifests found in storage")
+				return nil
+			}
+
+			l.Info(fmt.Sprintf("Found %d unique databases to restore", len(latestBackups)))
+
+			var wg sync.WaitGroup
+			sem := make(chan struct{}, Parallelism)
+			errChan := make(chan string, len(latestBackups))
+
+			for key, lb := range latestBackups {
+				l.Info("Queueing restore", "db", key, "manifest", lb.Path)
+				wg.Add(1)
+				go func(mName string, m *manifest.Manifest) {
+					defer wg.Done()
+					sem <- struct{}{}
+					defer func() { <-sem }()
+
+					subL := l.With("db", m.DBName, "engine", m.Engine)
+					connParams := database.ConnectionParams{
+						DBType:   m.Engine,
+						DBName:   m.DBName,
+						Host:     host,
+						Port:     port,
+						User:     user,
+						Password: password,
+						TLS: database.TLSConfig{
+							Enabled:    tlsEnabled,
+							Mode:       tlsMode,
+							CACert:     tlsCACert,
+							ClientCert: tlsClientCert,
+							ClientKey:  tlsClientKey,
+						},
+					}
+
+					if err := doRestore(cmd, subL, connParams, mName, notifier); err != nil {
+						subL.Error("Bulk restore failed", "error", err)
+						errChan <- fmt.Sprintf("%s (%s): %v", m.DBName, m.Engine, err)
+					}
+				}(lb.Path, lb.Manifest)
+			}
+
+			wg.Wait()
+			close(errChan)
+
+			errors := []string{}
+			for err := range errChan {
+				errors = append(errors, err)
+			}
+
+			if len(errors) > 0 {
+				return fmt.Errorf("some restores failed:\n%s", strings.Join(errors, "\n"))
+			}
+
+			return nil
 		}
 
 		// If no args, use flags
@@ -99,8 +223,13 @@ and streams it directly into the database engine.`,
 				}
 
 				connParams := database.ConnectionParams{
-					DBType: dbType,
-					DBUri:  mURI,
+					DBType:   dbType,
+					Host:     host,
+					Port:     port,
+					User:     user,
+					Password: password,
+					DBName:   dbName,
+					DBUri:    mURI,
 					TLS: database.TLSConfig{
 						Enabled:    tlsEnabled,
 						Mode:       tlsMode,
@@ -112,6 +241,10 @@ and streams it directly into the database engine.`,
 
 				if mURI == "" && dbURI != "" {
 					connParams.DBUri = dbURI
+				}
+
+				if connParams.DBType == "" && dbType != "" {
+					connParams.DBType = dbType
 				}
 
 				if err := doRestore(cmd, subL, connParams, mName, notifier); err != nil {
@@ -222,24 +355,7 @@ func doRestore(cmd *cobra.Command, l *logger.Logger, connParams database.Connect
 func init() {
 	rootCmd.AddCommand(restoreCmd)
 
-	restoreCmd.Flags().StringVar(&dbType, "db", "", "database engine (postgres, mysql, sqlite)")
-	restoreCmd.Flags().StringVar(&host, "host", "", "database host")
-	restoreCmd.Flags().StringVar(&user, "user", "", "database username")
-	restoreCmd.Flags().StringVar(&password, "password", "", "database password")
-	restoreCmd.Flags().StringVar(&dbName, "dbname", "", "database name")
-	restoreCmd.Flags().IntVar(&port, "port", 0, "database port")
-
-	restoreCmd.Flags().StringVar(&dbURI, "db-uri", "", "Full database connection URI (overrides individual flags)")
-	restoreCmd.Flags().BoolVar(&dedupe, "dedupe", true, "Enable storage-level deduplication (CAS, default true)")
-
 	restoreCmd.Flags().StringVar(&fileName, "name", "", "backup file name to restore")
-
-	restoreCmd.Flags().BoolVar(&tlsEnabled, "tls", false, "enable TLS/SSL for database connection")
-	restoreCmd.Flags().StringVar(&tlsMode, "tls-mode", "disable", "TLS mode")
-	restoreCmd.Flags().StringVar(&tlsCACert, "tls-ca-cert", "", "path to CA certificate")
-	restoreCmd.Flags().StringVar(&tlsClientCert, "tls-client-cert", "", "path to client certificate")
-	restoreCmd.Flags().StringVar(&tlsClientKey, "tls-client-key", "", "path to client private key")
-	restoreCmd.Flags().StringVarP(&target, "to", "t", "", "source URI for restore (e.g. user@host/path)")
 	restoreCmd.Flags().StringVarP(&from, "from", "f", "", "unified source URI for restore (alias for --to)")
-	restoreCmd.Flags().BoolVar(&remoteExec, "remote-exec", false, "execute restore tools on the remote storage host (bypasses pg_hba.conf)")
+	restoreCmd.Flags().BoolVar(&restoreAll, "all", false, "restore all latest backups found in storage")
 }

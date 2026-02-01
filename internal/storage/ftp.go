@@ -80,6 +80,43 @@ func (s *FTPStorage) GetMetadata(ctx context.Context, name string) ([]byte, erro
 	return io.ReadAll(r)
 }
 
+func (s *FTPStorage) ListMetadata(ctx context.Context, prefix string) ([]string, error) {
+	searchDir := s.remotePath
+	basePrefix := prefix
+
+	if strings.Contains(prefix, "/") {
+		if strings.HasSuffix(prefix, "/") {
+			searchDir = filepath.Join(s.remotePath, prefix)
+			basePrefix = ""
+		} else {
+			searchDir = filepath.Join(s.remotePath, filepath.Dir(prefix))
+			basePrefix = filepath.Base(prefix)
+		}
+	}
+
+	entries, err := s.client.NameList(searchDir)
+	if err != nil {
+		return nil, nil // Assume dir doesn't exist
+	}
+
+	var files []string
+	for _, entry := range entries {
+		name := filepath.Base(entry)
+		if basePrefix == "" || strings.HasPrefix(name, basePrefix) {
+			relDir := ""
+			if strings.Contains(prefix, "/") {
+				if strings.HasSuffix(prefix, "/") {
+					relDir = prefix
+				} else {
+					relDir = filepath.Dir(prefix) + "/"
+				}
+			}
+			files = append(files, relDir+name)
+		}
+	}
+	return files, nil
+}
+
 func (s *FTPStorage) Close() error {
 	return s.client.Quit()
 }

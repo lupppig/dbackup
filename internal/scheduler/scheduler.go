@@ -302,6 +302,7 @@ func (s *Scheduler) runInternal(t *ScheduledTask, l *logger.Logger, n notify.Not
 		Compress:             t.Options.Compress,
 		Algorithm:            t.Options.Algorithm,
 		FileName:             t.Options.FileName,
+		Dedupe:               true, // Incremental by default for scheduled backups
 		Encrypt:              t.Options.EncryptionKeyFile != "" || os.Getenv("DBACKUP_KEY") != "",
 		EncryptionKeyFile:    t.Options.EncryptionKeyFile,
 		EncryptionPassphrase: os.Getenv("DBACKUP_KEY"),

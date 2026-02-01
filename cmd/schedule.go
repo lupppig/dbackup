@@ -274,18 +274,11 @@ func init() {
 		c.Flags().StringVar(&interval, "interval", "", "Interval schedule (e.g. \"1h\", \"30m\")")
 		c.Flags().IntVar(&retries, "retries", 3, "Number of retries on failure")
 		c.Flags().StringVar(&retryDelay, "retry-delay", "5m", "Delay between retries")
-
-		c.Flags().StringVar(&dbName, "dbname", "", "database name")
-		c.Flags().StringVarP(&target, "to", "t", "", "target URI")
 	}
 
 	// Schedule Backup specific
-	scheduleBackupCmd.Flags().BoolVar(&compress, "compress", true, "compress backup output")
-	scheduleBackupCmd.Flags().StringVar(&compressionAlgo, "compression-algo", "lz4", "compression algorithm")
 	scheduleBackupCmd.Flags().StringVar(&fileName, "name", "", "custom backup file name")
-	scheduleBackupCmd.Flags().StringVar(&dbURI, "db-uri", "", "database URI")
 
 	// Schedule Restore specific
-	scheduleRestoreCmd.Flags().StringVarP(&from, "from", "f", "", "source URI for restore")
-	scheduleRestoreCmd.Flags().BoolVar(&confirmRestore, "confirm-restore", false, "confirm destructive restore operation")
+	scheduleRestoreCmd.Flags().StringVar(&fileName, "name", "", "custom backup file name to restore")
 }

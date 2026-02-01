@@ -16,6 +16,7 @@ type BackupOptions struct {
 	FileName      string
 	RemoteExec    bool // Force remote execution if storage is remote
 	AllowInsecure bool // Allow insecure protocols
+	Dedupe        bool // Enable storage-level deduplication (incremental)
 
 	// Encryption
 	Encrypt              bool

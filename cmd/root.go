@@ -88,6 +88,24 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&encryptionKeyFile, "encryption-key-file", "", "Path to the encryption key file")
 	rootCmd.PersistentFlags().StringVar(&encryptionPassphrase, "encryption-passphrase", "", "Passphrase for encryption key derivation")
 	rootCmd.PersistentFlags().BoolVar(&confirmRestore, "confirm-restore", false, "Confirm destructive restore operations")
+
+	// Core database flags
+	rootCmd.PersistentFlags().StringVarP(&dbType, "engine", "e", "", "database engine (postgres, mysql, sqlite)")
+	rootCmd.PersistentFlags().StringVarP(&dbName, "db", "d", "", "database name or file path")
+	rootCmd.PersistentFlags().StringVar(&host, "host", "", "database host")
+	rootCmd.PersistentFlags().StringVar(&user, "user", "", "database username")
+	rootCmd.PersistentFlags().StringVar(&password, "password", "", "database password")
+	rootCmd.PersistentFlags().IntVar(&port, "port", 0, "database port")
+	rootCmd.PersistentFlags().StringVar(&dbURI, "db-uri", "", "full database connection URI (overrides individual flags)")
+	rootCmd.PersistentFlags().StringVarP(&target, "to", "t", "", "unified targeting URI (e.g. ./local/path, sftp://user@host/path)")
+	rootCmd.PersistentFlags().BoolVar(&remoteExec, "remote-exec", false, "execute backup/restore tools on the remote storage host")
+	rootCmd.PersistentFlags().BoolVar(&dedupe, "dedupe", true, "Enable storage-level deduplication (CAS, default true)")
+
+	rootCmd.PersistentFlags().BoolVar(&tlsEnabled, "tls", false, "enable TLS/SSL for database connection")
+	rootCmd.PersistentFlags().StringVar(&tlsMode, "tls-mode", "disable", "TLS mode (disable, require, verify-ca, verify-full)")
+	rootCmd.PersistentFlags().StringVar(&tlsCACert, "tls-ca-cert", "", "path to CA certificate for TLS verification")
+	rootCmd.PersistentFlags().StringVar(&tlsClientCert, "tls-client-cert", "", "path to client certificate for mutual TLS (mTLS)")
+	rootCmd.PersistentFlags().StringVar(&tlsClientKey, "tls-client-key", "", "path to client private key for mutual TLS (mTLS)")
 }
 
 func Execute() error {
