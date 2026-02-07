@@ -2,11 +2,12 @@ package storage
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/url"
 	"path/filepath"
 	"strings"
+
+	apperrors "github.com/lupppig/dbackup/internal/errors"
 )
 
 type StorageOptions struct {
@@ -54,7 +55,7 @@ func FromURI(uriStr string, opts StorageOptions) (Storage, error) {
 
 	u, err := url.Parse(uriStr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse storage URI: %w", err)
+		return nil, apperrors.Wrap(err, apperrors.TypeConfig, "failed to parse storage URI", "Check the syntax of your --to target.")
 	}
 
 	switch u.Scheme {
@@ -77,7 +78,7 @@ func FromURI(uriStr string, opts StorageOptions) (Storage, error) {
 		}
 		return NewDedupeStorage(wrapped), nil
 	default:
-		return nil, fmt.Errorf("unsupported storage scheme: %s", u.Scheme)
+		return nil, apperrors.New(apperrors.TypeConfig, "unsupported storage scheme: "+u.Scheme, "Supported schemes are: local, sftp, ftp, docker.")
 	}
 }
 

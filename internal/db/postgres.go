@@ -10,6 +10,7 @@ import (
 	"time"
 
 	_ "github.com/lib/pq"
+	apperrors "github.com/lupppig/dbackup/internal/errors"
 	"github.com/lupppig/dbackup/internal/logger"
 )
 
@@ -51,15 +52,18 @@ func (pa *PostgresAdapter) TestConnection(ctx context.Context, conn ConnectionPa
 		// Remote runner: use psql to test connection
 		args := []string{"--dbname", dsn, "-c", "SELECT 1"}
 		err := runner.Run(ctx, "psql", args, io.Discard)
-		if err != nil && strings.Contains(err.Error(), "status 127") {
-			return fmt.Errorf("psql client not found on remote host. Please install postgresql-client on the target VM/Container to enable remote connection testing")
+		if err != nil {
+			if strings.Contains(err.Error(), "status 127") || strings.Contains(err.Error(), "executable file not found") {
+				return apperrors.New(apperrors.TypeDependency, "psql client not found", "Please install postgresql-client on the target system to enable connection testing and logical backups.")
+			}
+			return apperrors.Wrap(err, apperrors.TypeConnection, "failed to connect via psql", "Ensure the database is reachable and the credentials are correct.")
 		}
-		return err
+		return nil
 	}
 
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
-		return fmt.Errorf("failed to open connection: %w", err)
+		return apperrors.Wrap(err, apperrors.TypeConfig, "failed to open database connection", "Check your connection string and driver availability.")
 	}
 
 	defer db.Close()
@@ -68,7 +72,7 @@ func (pa *PostgresAdapter) TestConnection(ctx context.Context, conn ConnectionPa
 	defer cancel()
 
 	if err := db.PingContext(ctx); err != nil {
-		return fmt.Errorf("failed to ping database: %w", err)
+		return apperrors.Wrap(err, apperrors.TypeConnection, "failed to ping database", "Verify the database host, port, and credentials.")
 	}
 	return nil
 }
@@ -141,7 +145,10 @@ func (pa *PostgresAdapter) runLogicalBackup(ctx context.Context, conn Connection
 	}
 
 	if err := runner.Run(ctx, "pg_dump", args, w); err != nil {
-		return fmt.Errorf("pg_dump failed: %w", err)
+		if strings.Contains(err.Error(), "status 127") || strings.Contains(err.Error(), "executable file not found") {
+			return apperrors.New(apperrors.TypeDependency, "pg_dump not found", "Please install postgresql-client to enable logical backups.")
+		}
+		return apperrors.Wrap(err, apperrors.TypeInternal, "pg_dump failed", "Check pg_dump logs or permissions.")
 	}
 
 	return nil

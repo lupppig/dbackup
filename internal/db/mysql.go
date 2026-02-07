@@ -8,9 +8,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
+	apperrors "github.com/lupppig/dbackup/internal/errors"
 	"github.com/lupppig/dbackup/internal/logger"
 )
 
@@ -64,7 +66,7 @@ func (ma *MysqlAdapter) TestConnection(ctx context.Context, conn ConnectionParam
 
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
-		return fmt.Errorf("failed to open connection: %w", err)
+		return apperrors.Wrap(err, apperrors.TypeConfig, "failed to open MySQL connection", "Check your connection string and driver availability.")
 	}
 	defer db.Close()
 
@@ -72,7 +74,7 @@ func (ma *MysqlAdapter) TestConnection(ctx context.Context, conn ConnectionParam
 	defer cancel()
 
 	if err := db.PingContext(ctx); err != nil {
-		return fmt.Errorf("failed to ping database: %w", err)
+		return apperrors.Wrap(err, apperrors.TypeConnection, "failed to ping database", "Verify the database host, port, and credentials.")
 	}
 	return nil
 }
@@ -83,7 +85,7 @@ func (ma *MysqlAdapter) BuildConnection(ctx context.Context, conn ConnectionPara
 	}
 
 	if conn.Host == "" || conn.User == "" || conn.DBName == "" {
-		return "", fmt.Errorf("missing required MySQL connection fields")
+		return "", apperrors.New(apperrors.TypeConfig, "missing required MySQL connection fields", "Check --host, --user, and --db flags.")
 	}
 
 	if conn.Port == 0 {
@@ -116,10 +118,10 @@ func (ma *MysqlAdapter) ensureTLSConfig(cfg TLSConfig) (string, error) {
 		rootCertPool := x509.NewCertPool()
 		pem, err := os.ReadFile(cfg.CACert)
 		if err != nil {
-			return "", fmt.Errorf("failed to read CA cert: %w", err)
+			return "", apperrors.Wrap(err, apperrors.TypeResource, "failed to read CA cert", "Check the path and permissions for your CA certificate.")
 		}
 		if ok := rootCertPool.AppendCertsFromPEM(pem); !ok {
-			return "", fmt.Errorf("failed to append CA cert")
+			return "", apperrors.New(apperrors.TypeSecurity, "failed to append CA cert", "Provide a valid PEM-encoded CA certificate.")
 		}
 		tlsConfig.RootCAs = rootCertPool
 	}
@@ -128,7 +130,7 @@ func (ma *MysqlAdapter) ensureTLSConfig(cfg TLSConfig) (string, error) {
 		clientCert := make([]tls.Certificate, 0, 1)
 		certs, err := tls.LoadX509KeyPair(cfg.ClientCert, cfg.ClientKey)
 		if err != nil {
-			return "", fmt.Errorf("failed to load client cert/key: %w", err)
+			return "", apperrors.Wrap(err, apperrors.TypeAuth, "failed to load client cert/key", "Verify the certification paths and ensure they match.")
 		}
 		clientCert = append(clientCert, certs)
 		tlsConfig.Certificates = clientCert
@@ -195,7 +197,10 @@ func (ma *MysqlAdapter) runLogicalFull(ctx context.Context, conn ConnectionParam
 	args = append(args, conn.DBName)
 
 	if err := runner.Run(ctx, "mysqldump", args, w); err != nil {
-		return fmt.Errorf("mysqldump execution failed: %w", err)
+		if strings.Contains(err.Error(), "status 127") || strings.Contains(err.Error(), "executable file not found") {
+			return apperrors.New(apperrors.TypeDependency, "mysqldump not found", "Please install mysql-client or mariadb-client to enable logical backups.")
+		}
+		return apperrors.Wrap(err, apperrors.TypeInternal, "mysqldump execution failed", "Check mysqldump logs or permissions.")
 	}
 
 	return nil
@@ -218,7 +223,10 @@ func (ma *MysqlAdapter) runPhysicalFull(ctx context.Context, conn ConnectionPara
 
 	// XtraBackup streams the entire database instance to stdout in xbstream format.
 	if err := runner.Run(ctx, "xtrabackup", args, w); err != nil {
-		return fmt.Errorf("xtrabackup physical backup failed: %w", err)
+		if strings.Contains(err.Error(), "status 127") || strings.Contains(err.Error(), "executable file not found") {
+			return apperrors.New(apperrors.TypeDependency, "xtrabackup not found", "Please install xtrabackup to enable physical backups.")
+		}
+		return apperrors.Wrap(err, apperrors.TypeInternal, "xtrabackup physical backup failed", "Check xtrabackup logs or permissions.")
 	}
 
 	return nil
@@ -242,7 +250,10 @@ func (ma *MysqlAdapter) RunRestore(ctx context.Context, conn ConnectionParams, r
 	}
 
 	if err := runner.RunWithIO(ctx, "mysql", args, r, nil); err != nil {
-		return fmt.Errorf("mysql restore failed: %w", err)
+		if strings.Contains(err.Error(), "status 127") || strings.Contains(err.Error(), "executable file not found") {
+			return apperrors.New(apperrors.TypeDependency, "mysql client not found", "Please install mysql to enable restores.")
+		}
+		return apperrors.Wrap(err, apperrors.TypeInternal, "mysql restore failed", "Check restore logs or input file.")
 	}
 	return nil
 }

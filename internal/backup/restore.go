@@ -15,6 +15,7 @@ import (
 	"github.com/lupppig/dbackup/internal/compress"
 	"github.com/lupppig/dbackup/internal/crypto"
 	database "github.com/lupppig/dbackup/internal/db"
+	apperrors "github.com/lupppig/dbackup/internal/errors"
 	"github.com/lupppig/dbackup/internal/manifest"
 	"github.com/lupppig/dbackup/internal/notify"
 	"github.com/lupppig/dbackup/internal/storage"
@@ -128,14 +129,14 @@ func (m *RestoreManager) Run(ctx context.Context, adapter database.DBAdapter, co
 	r.Close()
 	f.Close()
 	if err != nil {
-		return fmt.Errorf("failed to download backup: %w", err)
+		return apperrors.Wrap(err, apperrors.TypeResource, "failed to download backup", "Check storage connectivity and file existence.")
 	}
 
 	// Step 3: Verify Integrity
 	if man != nil {
 		actualChecksum := hex.EncodeToString(hasher.Sum(nil))
 		if man.Checksum != "" && man.Checksum != actualChecksum {
-			return fmt.Errorf("INTEGRITY FAILURE: backup checksum mismatch (expected %s, got %s)", man.Checksum, actualChecksum)
+			return apperrors.ErrIntegrityMismatch
 		}
 		if m.Options.Logger != nil {
 			m.Options.Logger.Info("Integrity verification passed", "checksum", actualChecksum)
@@ -179,7 +180,7 @@ func (m *RestoreManager) Run(ctx context.Context, adapter database.DBAdapter, co
 			if pass := os.Getenv("DBACKUP_KEY"); pass != "" {
 				m.Options.EncryptionPassphrase = pass
 			} else {
-				return fmt.Errorf("backup is encrypted but no passphrase or key-file was provided (set DBACKUP_KEY env var)")
+				return apperrors.New(apperrors.TypeSecurity, "backup is encrypted but no passphrase or key-file was provided", "Set the DBACKUP_KEY environment variable or use --encryption-passphrase.")
 			}
 		}
 		km, err := crypto.NewKeyManager(m.Options.EncryptionPassphrase, m.Options.EncryptionKeyFile)

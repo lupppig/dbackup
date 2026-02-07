@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/lupppig/dbackup/internal/db"
+	apperrors "github.com/lupppig/dbackup/internal/errors"
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
@@ -31,9 +32,7 @@ func NewSSHStorage(u *url.URL) (*SSHStorage, error) {
 	}
 
 	remotePath := u.Path
-	if strings.HasPrefix(remotePath, "/./") {
-		remotePath = strings.TrimPrefix(remotePath, "/./")
-	}
+	remotePath = strings.TrimPrefix(remotePath, "/./")
 
 	return &SSHStorage{
 		remotePath: remotePath,
@@ -87,18 +86,18 @@ func (s *SSHStorage) connect() error {
 	}
 
 	if len(config.Auth) == 0 {
-		return fmt.Errorf("no supported SSH authentication methods found (checked Agent, common keys, and password)")
+		return apperrors.New(apperrors.TypeAuth, "no supported SSH authentication methods found", "Ensure you have an SSH agent running or provide valid private keys/passwords.")
 	}
 
 	client, err := ssh.Dial("tcp", s.host, config)
 	if err != nil {
-		return fmt.Errorf("failed to connect to %s via SSH: %w (check if the host is reachable and your SSH keys/passwords are correct)", s.host, err)
+		return apperrors.Wrap(err, apperrors.TypeConnection, "failed to connect via SSH", "Check host reachability, SSH port, and credentials.")
 	}
 
 	sftpClient, err := sftp.NewClient(client)
 	if err != nil {
 		client.Close()
-		return fmt.Errorf("failed to create sftp client: %w", err)
+		return apperrors.Wrap(err, apperrors.TypeInternal, "failed to create SFTP client", "Verify the SFTP subsystem is enabled on the remote host.")
 	}
 
 	s.client = client

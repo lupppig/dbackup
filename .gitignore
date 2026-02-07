@@ -34,5 +34,12 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
-
+stress-test-data
+stress-test-results.log	
+stress-test-results.json
+stress-test.db
+stress-test.dbk
+stress-test.sqlite
+stress-test.sqlite3
+._stress
 bin

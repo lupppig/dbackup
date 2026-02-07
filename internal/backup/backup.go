@@ -12,6 +12,7 @@ import (
 	"github.com/lupppig/dbackup/internal/compress"
 	"github.com/lupppig/dbackup/internal/crypto"
 	database "github.com/lupppig/dbackup/internal/db"
+	apperrors "github.com/lupppig/dbackup/internal/errors"
 	"github.com/lupppig/dbackup/internal/manifest"
 	"github.com/lupppig/dbackup/internal/notify"
 	"github.com/lupppig/dbackup/internal/storage"
@@ -173,7 +174,7 @@ func (m *BackupManager) Run(ctx context.Context, adapter database.DBAdapter, con
 
 	location, err := m.storage.Save(ctx, finalName, tr)
 	if err != nil {
-		return fmt.Errorf("storage save failed: %w", err)
+		return apperrors.Wrap(err, apperrors.TypeResource, "storage save failed", "Check storage permissions and disk space.")
 	}
 
 	if err := <-errChan; err != nil {

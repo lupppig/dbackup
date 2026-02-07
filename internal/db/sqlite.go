@@ -3,10 +3,10 @@ package db
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"io"
 	"os"
 
+	apperrors "github.com/lupppig/dbackup/internal/errors"
 	"github.com/lupppig/dbackup/internal/logger"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -28,17 +28,21 @@ func (sq *SqliteAdapter) SetLogger(l *logger.Logger) {
 }
 
 func (sq *SqliteAdapter) TestConnection(ctx context.Context, connParams ConnectionParams, runner Runner) error {
-	sq.Logger.Info("connecting to sqlite Database...", "path", connParams.DBName)
+	if sq.Logger != nil {
+		sq.Logger.Info("connecting to sqlite Database...", "path", connParams.DBName)
+	}
 	db, err := sql.Open("sqlite3", connParams.DBName)
 	if err != nil {
-		return fmt.Errorf("failed to open SQLite DB: %w", err)
+		return apperrors.Wrap(err, apperrors.TypeConfig, "failed to open SQLite DB", "Verify the file path and permissions.")
 	}
 	defer db.Close()
 
 	if err := db.PingContext(ctx); err != nil {
-		return fmt.Errorf("failed to ping SQLite DB: %w", err)
+		return apperrors.Wrap(err, apperrors.TypeResource, "failed to ping SQLite DB", "Ensure the file is a valid SQLite database.")
 	}
-	sq.Logger.Info("Database connection Successful...")
+	if sq.Logger != nil {
+		sq.Logger.Info("Database connection Successful...")
+	}
 	return nil
 }
 
@@ -49,7 +53,7 @@ func (sq *SqliteAdapter) BuildConnection(ctx context.Context, connParams Connect
 	}
 
 	if path == "" {
-		return "", fmt.Errorf("sqlite DB path is empty")
+		return "", apperrors.New(apperrors.TypeConfig, "sqlite DB path is empty", "Provide a database file path via --db.")
 	}
 	return path, nil
 }

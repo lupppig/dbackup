@@ -17,7 +17,7 @@ import (
 )
 
 var (
-	restoreAll bool
+	restoreAuto bool
 )
 
 var restoreCmd = &cobra.Command{
@@ -58,11 +58,15 @@ and streams it directly into the database engine.`,
 			}
 		}
 
-		if restoreAll {
+		if restoreAuto || (len(args) == 0 && fileName == "") {
 			if len(args) > 0 {
-				return fmt.Errorf("extra arguments provided with --all: %v", args)
+				return fmt.Errorf("extra arguments provided with auto-restore: %v", args)
 			}
-			l.Info("Scanning for all backups to restore...", "target", target)
+			msg := "Scanning for latest backups to restore..."
+			if dbType != "" {
+				msg = fmt.Sprintf("Scanning for latest %s backups to restore...", dbType)
+			}
+			l.Info(msg, "target", target)
 
 			s, err := storage.FromURI(target, storage.StorageOptions{AllowInsecure: AllowInsecure})
 			if err != nil {
@@ -100,6 +104,11 @@ and streams it directly into the database engine.`,
 					continue
 				}
 
+				// Engine Filter
+				if dbType != "" && strings.ToLower(m.Engine) != strings.ToLower(dbType) {
+					continue
+				}
+
 				key := fmt.Sprintf("%s:%s", m.Engine, m.DBName)
 				if current, ok := latestBackups[key]; !ok || m.CreatedAt.After(current.Manifest.CreatedAt) {
 					latestBackups[key] = &struct {
@@ -110,11 +119,11 @@ and streams it directly into the database engine.`,
 			}
 
 			if len(latestBackups) == 0 {
-				l.Info("No manifests found in storage")
+				l.Info("No applicable manifests found in storage")
 				return nil
 			}
 
-			l.Info(fmt.Sprintf("Found %d unique databases to restore", len(latestBackups)))
+			l.Info(fmt.Sprintf("Found %d unique database(s) to restore", len(latestBackups)))
 
 			var wg sync.WaitGroup
 			sem := make(chan struct{}, Parallelism)
@@ -146,7 +155,7 @@ and streams it directly into the database engine.`,
 					}
 
 					if err := doRestore(cmd, subL, connParams, mName, notifier); err != nil {
-						subL.Error("Bulk restore failed", "error", err)
+						subL.Error("Auto restore failed", "error", err)
 						errChan <- fmt.Sprintf("%s (%s): %v", m.DBName, m.Engine, err)
 					}
 				}(lb.Path, lb.Manifest)
@@ -357,5 +366,5 @@ func init() {
 
 	restoreCmd.Flags().StringVar(&fileName, "name", "", "backup file name to restore")
 	restoreCmd.Flags().StringVarP(&from, "from", "f", "", "unified source URI for restore (alias for --to)")
-	restoreCmd.Flags().BoolVar(&restoreAll, "all", false, "restore all latest backups found in storage")
+	restoreCmd.Flags().BoolVarP(&restoreAuto, "auto", "a", false, "automatically restore latest backups (default if no manifest is specified)")
 }
