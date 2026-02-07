@@ -46,6 +46,20 @@ func (s *LocalStorage) Save(ctx context.Context, name string, r io.Reader) (stri
 	return path, nil
 }
 
+func (s *LocalStorage) Open(ctx context.Context, name string) (io.ReadCloser, error) {
+	path := filepath.Join(s.baseDir, name)
+	return os.Open(path)
+}
+
+func (s *LocalStorage) Delete(ctx context.Context, name string) error {
+	path := filepath.Join(s.baseDir, name)
+	return os.Remove(path)
+}
+
+func (s *LocalStorage) Location() string {
+	return s.baseDir
+}
+
 func (s *LocalStorage) PutMetadata(ctx context.Context, name string, data []byte) error {
 	path := filepath.Join(s.baseDir, name)
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
@@ -96,13 +110,4 @@ func (s *LocalStorage) ListMetadata(ctx context.Context, prefix string) ([]strin
 		}
 	}
 	return files, nil
-}
-
-func (s *LocalStorage) Location() string {
-	return s.baseDir
-}
-
-func (s *LocalStorage) Open(ctx context.Context, name string) (io.ReadCloser, error) {
-	path := filepath.Join(s.baseDir, name)
-	return os.Open(path)
 }

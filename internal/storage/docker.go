@@ -61,6 +61,12 @@ func (s *DockerStorage) Open(ctx context.Context, name string) (io.ReadCloser, e
 	return pr, nil
 }
 
+func (s *DockerStorage) Delete(ctx context.Context, name string) error {
+	path := filepath.Join(s.remotePath, name)
+	cmd := exec.CommandContext(ctx, "docker", "exec", s.containerName, "rm", path)
+	return cmd.Run()
+}
+
 func (s *DockerStorage) Location() string {
 	return "docker://" + s.containerName + s.remotePath
 }

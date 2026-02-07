@@ -105,7 +105,7 @@ and streams it directly into the database engine.`,
 				}
 
 				// Engine Filter
-				if dbType != "" && strings.ToLower(m.Engine) != strings.ToLower(dbType) {
+				if dbType != "" && !strings.EqualFold(m.Engine, dbType) {
 					continue
 				}
 

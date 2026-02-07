@@ -125,6 +125,10 @@ func (s *DedupeStorage) Open(ctx context.Context, name string) (io.ReadCloser, e
 	}, nil
 }
 
+func (s *DedupeStorage) Delete(ctx context.Context, name string) error {
+	return s.inner.Delete(ctx, name)
+}
+
 func (s *DedupeStorage) Location() string {
 	return "dedupe://" + s.inner.Location()
 }

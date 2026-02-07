@@ -64,6 +64,8 @@ type TaskOptions struct {
 	Retries              int    `json:"retries"`
 	RetryDelay           string `json:"retry_delay"`
 	Verify               bool   `json:"verify"`
+	Retention            string `json:"retention,omitempty"`
+	Keep                 int    `json:"keep,omitempty"`
 }
 
 type Scheduler struct {
@@ -310,6 +312,20 @@ func (s *Scheduler) runInternal(t *ScheduledTask, l *logger.Logger, n notify.Not
 		Logger:               l,
 		Notifier:             n,
 	}
+
+	if t.Options.Retention != "" {
+		dur, _ := time.ParseDuration(t.Options.Retention)
+		// Handle daily duration if ends in 'd'
+		if strings.HasSuffix(t.Options.Retention, "d") {
+			days := strings.TrimSuffix(t.Options.Retention, "d")
+			var d int
+			fmt.Sscanf(days, "%d", &d)
+			dur = time.Duration(d) * 24 * time.Hour
+		}
+		opts.Retention = dur
+	}
+	opts.Keep = t.Options.Keep
+
 	if t.Type == RestoreTask {
 		opts.StorageURI = t.SourceURI
 	}

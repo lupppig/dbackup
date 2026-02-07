@@ -133,6 +133,13 @@ func (s *SSHStorage) Open(ctx context.Context, name string) (io.ReadCloser, erro
 	return s.sftpClient.Open(filepath.Join(s.remotePath, name))
 }
 
+func (s *SSHStorage) Delete(ctx context.Context, name string) error {
+	if err := s.connect(); err != nil {
+		return err
+	}
+	return s.sftpClient.Remove(filepath.Join(s.remotePath, name))
+}
+
 func (s *SSHStorage) Location() string {
 	return "sftp://" + s.host + s.remotePath
 }

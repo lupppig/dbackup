@@ -73,6 +73,9 @@ var (
 	encryptionKeyFile    string
 	encryptionPassphrase string
 	confirmRestore       bool
+
+	retention string
+	keep      int
 )
 
 func init() {

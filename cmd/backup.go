@@ -160,6 +160,8 @@ func doBackup(cmd *cobra.Command, l *logger.Logger, connParams database.Connecti
 		Encrypt:              encrypt,
 		EncryptionKeyFile:    encryptionKeyFile,
 		EncryptionPassphrase: encryptionPassphrase,
+		Retention:            parseRetention(retention),
+		Keep:                 keep,
 		Logger:               l,
 		Notifier:             notifier,
 	})
@@ -222,4 +224,20 @@ func init() {
 	backupCmd.Flags().BoolVar(&compress, "compress", true, "compress backup output (default true)")
 	backupCmd.Flags().StringVar(&compressionAlgo, "compression-algo", "lz4", "compression algorithm (gzip, zstd, lz4, none, defaults to lz4). All are wrapped in a tar archive unless 'none' is specified.")
 	backupCmd.Flags().StringVar(&fileName, "name", "", "custom backup file name")
+	backupCmd.Flags().StringVar(&retention, "retention", "", "retention period (e.g. 7d, 24h)")
+	backupCmd.Flags().IntVar(&keep, "keep", 0, "number of backups to keep")
+}
+
+func parseRetention(s string) time.Duration {
+	if s == "" {
+		return 0
+	}
+	dur, _ := time.ParseDuration(s)
+	if strings.HasSuffix(s, "d") {
+		days := strings.TrimSuffix(s, "d")
+		var d int
+		fmt.Sscanf(days, "%d", &d)
+		dur = time.Duration(d) * 24 * time.Hour
+	}
+	return dur
 }

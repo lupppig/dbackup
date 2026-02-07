@@ -227,6 +227,19 @@ func (m *BackupManager) Run(ctx context.Context, adapter database.DBAdapter, con
 		_ = m.storage.PutMetadata(ctx, finalName+".manifest", manBytes)
 	}
 
+	// Trigger pruning
+	pm := NewPruneManager(m.storage, PruneOptions{
+		Retention: m.Options.Retention,
+		Keep:      m.Options.Keep,
+		DBType:    conn.DBType,
+		DBName:    conn.DBName,
+	})
+	if pruneErr := pm.Prune(ctx); pruneErr != nil {
+		if m.Options.Logger != nil {
+			m.Options.Logger.Warn("Backup pruning failed", "error", pruneErr)
+		}
+	}
+
 	if m.Options.Logger != nil {
 		m.Options.Logger.Info("Backup saved successfully", "location", location)
 	}

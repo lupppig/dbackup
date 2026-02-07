@@ -61,6 +61,10 @@ func (s *FTPStorage) Open(ctx context.Context, name string) (io.ReadCloser, erro
 	return s.client.Retr(filepath.Join(s.remotePath, name))
 }
 
+func (s *FTPStorage) Delete(ctx context.Context, name string) error {
+	return s.client.Delete(filepath.Join(s.remotePath, name))
+}
+
 func (s *FTPStorage) Location() string {
 	return "ftp://" + s.host + s.remotePath
 }

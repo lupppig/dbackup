@@ -67,6 +67,8 @@ var scheduleBackupCmd = &cobra.Command{
 				EncryptionPassphrase: "", // Never store
 				Retries:              retries,
 				RetryDelay:           retryDelay,
+				Retention:            retention,
+				Keep:                 keep,
 			},
 		}
 
@@ -278,6 +280,8 @@ func init() {
 
 	// Schedule Backup specific
 	scheduleBackupCmd.Flags().StringVar(&fileName, "name", "", "custom backup file name")
+	scheduleBackupCmd.Flags().StringVar(&retention, "retention", "", "retention period (e.g. 7d, 24h)")
+	scheduleBackupCmd.Flags().IntVar(&keep, "keep", 0, "number of backups to keep")
 
 	// Schedule Restore specific
 	scheduleRestoreCmd.Flags().StringVar(&fileName, "name", "", "custom backup file name to restore")

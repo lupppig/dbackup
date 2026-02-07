@@ -3,6 +3,8 @@ package backup
 import (
 	"context"
 
+	"time"
+
 	"github.com/lupppig/dbackup/internal/logger"
 	"github.com/lupppig/dbackup/internal/notify"
 )
@@ -17,6 +19,9 @@ type BackupOptions struct {
 	RemoteExec    bool // Force remote execution if storage is remote
 	AllowInsecure bool // Allow insecure protocols
 	Dedupe        bool // Enable storage-level deduplication (incremental)
+
+	Retention time.Duration
+	Keep      int
 
 	// Encryption
 	Encrypt              bool
