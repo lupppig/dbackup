@@ -1,10 +1,10 @@
-# dbackup 🚀
+# dbackup
 
 A high-performance, extensible database backup CLI with built-in **deduplication**, **encryption**, **scheduling**, and **multi-cloud** storage support.
 
 ---
 
-## 🏗 Architecture
+## Architecture
 
 ```text
     +-----------+       +------------------------+       +-------------------+
@@ -23,7 +23,7 @@ A high-performance, extensible database backup CLI with built-in **deduplication
                         +------------------------+
 ```
 
-## ✨ Features
+## Features
 
 - **Multi-Database Support**: Native integration with PostgreSQL, MySQL/MariaDB, and SQLite.
 - **Content-Addressable Storage (Dedupe)**: Save massive amounts of space by only storing unique data chunks.
@@ -36,7 +36,7 @@ A high-performance, extensible database backup CLI with built-in **deduplication
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### 1. Installation
 ```bash
@@ -51,40 +51,34 @@ dbackup doctor
 
 ---
 
-## 📦 Usage
+## Usage
 
 ### Listing Backups
 Discover what's stored in your storage backend:
 ```bash
-# List all backups in a remote SFTP folder
 dbackup backups --to sftp://user@host/backups
 
-# Filter by database
 dbackup backups --to local://./backups --db my_app_db
 ```
 
 ### Backing Up
 ```bash
-# Individual backup to S3
 dbackup backup postgres --db my_db --to s3://key:secret@localhost:9000/backups
 
-# Comprehensive dump from config
 dbackup dump --config ~/.dbackup/backup.yaml
 ```
 
 ### Restoring
 `dbackup` makes restoration safe and intelligent:
 ```bash
-# Restore specific manifest
 dbackup restore mysql --name latest.manifest --to mysql://user:pass@localhost/db --confirm-restore
 
-# Auto-restore latest backups for all configured tasks
 dbackup restore --auto --confirm-restore
 ```
 
 ---
 
-## 🛠 Configuration (`backup.yaml`)
+## Configuration (`backup.yaml`)
 
 `dbackup` reads from `~/.dbackup/backup.yaml` by default.
 
@@ -112,7 +106,7 @@ restores:
 
 ---
 
-## 🔗 Storage Backends & URI Options
+## Storage Backends & URI Options
 
 | Backend | URI Format | Key Parameters |
 |---------|------------|----------------|
@@ -127,7 +121,7 @@ restores:
 
 ---
 
-## 🔐 Security & Reliability
+## Security & Reliability
 
 - **AES-256-GCM**: Industry-standard authenticated encryption for data at rest.
 - **Fast-Fail Connectivity**: S3 and SFTP operations include intelligent 15s timeouts to prevent infinite hangs.
@@ -136,5 +130,5 @@ restores:
 
 ---
 
-## 📜 License
+## License
 MIT License

@@ -25,7 +25,6 @@ func (pw *ProgressWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 
-// ProgressReader tracks bytes read and updates an mpb.Bar.
 type ProgressReader struct {
 	r   io.Reader
 	bar *mpb.Bar
@@ -43,7 +42,6 @@ func (pr *ProgressReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// ByteCounter counts bytes without a UI bar, used for manifest size tracking.
 type ByteCounter struct {
 	Count int64
 }
