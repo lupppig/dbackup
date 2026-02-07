@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 
+	"github.com/lupppig/dbackup/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -22,6 +23,9 @@ var rootCmd = &cobra.Command{
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		if encryptionPassphrase == "" {
 			encryptionPassphrase = os.Getenv("DBACKUP_KEY")
+		}
+		if err := config.Initialize(configFile); err != nil {
+			return err
 		}
 		return nil
 	},
@@ -42,14 +46,14 @@ var (
 	LogJSON bool
 	NoColor bool
 
-	config   string
-	dbType   string
-	host     string
-	user     string
-	password string
-	dbName   string
-	port     int
-	dbURI    string
+	configFile string
+	dbType     string
+	host       string
+	user       string
+	password   string
+	dbName     string
+	port       int
+	dbURI      string
 
 	compress        bool
 	compressionAlgo string
@@ -84,6 +88,7 @@ func init() {
 
 	rootCmd.PersistentFlags().BoolVar(&LogJSON, "log-json", false, "output logs in JSON format")
 	rootCmd.PersistentFlags().BoolVar(&NoColor, "no-color", false, "disable colored terminal output")
+	rootCmd.PersistentFlags().StringVar(&configFile, "config", "", "path to config file (default is $HOME/.dbackup/backup.yaml)")
 	rootCmd.PersistentFlags().StringVar(&SlackWebhook, "slack-webhook", "", "Slack Incoming Webhook URL for notifications")
 	rootCmd.PersistentFlags().IntVar(&Parallelism, "parallelism", 4, "Number of databases to back up/restore simultaneously")
 	rootCmd.PersistentFlags().BoolVar(&AllowInsecure, "allow-insecure", false, "Allow insecure protocols (like plain FTP)")
