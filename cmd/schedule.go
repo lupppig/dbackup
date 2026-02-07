@@ -1,12 +1,14 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/lupppig/dbackup/internal/logger"
@@ -181,20 +183,30 @@ var scheduleStartCmd = &cobra.Command{
 		tasks := s.ListTasks()
 		l.Info("Starting scheduler", "task_count", len(tasks))
 
+		l.Info("Starting scheduler")
 		for _, t := range tasks {
 			if err := s.AddTask(t); err != nil {
 				l.Warn("Failed to schedule task", "id", t.ID, "error", err)
 			}
 		}
 
+		sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+
 		s.Start()
-		defer s.Stop()
+		l.Info("Scheduler active. Press Ctrl+C to stop.")
 
-		sigChan := make(chan os.Signal, 1)
-		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-		<-sigChan
+		<-sigCtx.Done()
+		l.Info("Shutting down scheduler...")
 
-		l.Info("Shutting down scheduler")
+		// Wait for running tasks with a timeout
+		stopCtx := s.Stop()
+		select {
+		case <-stopCtx.Done():
+			l.Info("Graceful shutdown complete")
+		case <-time.After(30 * time.Second):
+			l.Warn("Shutdown timeout reached, forcing exit")
+		}
 		return nil
 	},
 }

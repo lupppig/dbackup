@@ -7,6 +7,10 @@ import (
 	"sync"
 	"time"
 
+	"os"
+	"os/signal"
+	"syscall"
+
 	"github.com/lupppig/dbackup/internal/backup"
 	"github.com/lupppig/dbackup/internal/config"
 	"github.com/lupppig/dbackup/internal/db"
@@ -36,7 +40,11 @@ var dumpCmd = &cobra.Command{
 			notifier = notify.NewSlackNotifier(conf.Notifications.Slack.WebhookURL)
 		}
 
-		ctx := context.Background()
+		// Setup global signal handling
+		sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+
+		ctx := sigCtx
 
 		// Determine if scheduler should start.
 		hasSchedule := false
@@ -135,7 +143,19 @@ var dumpCmd = &cobra.Command{
 
 			l.Info("Scheduler started. Press Ctrl+C to stop.")
 			s.Start()
-			select {}
+
+			// Wait for signal or context cancellation
+			<-ctx.Done()
+			l.Info("Shutting down scheduler...")
+
+			stopCtx := s.Stop()
+			select {
+			case <-stopCtx.Done():
+				l.Info("Graceful shutdown complete")
+			case <-time.After(30 * time.Second):
+				l.Warn("Shutdown timeout reached, forcing exit")
+			}
+			return nil
 		}
 
 		l.Info("Executing immediate tasks", "parallelism", conf.Parallelism)

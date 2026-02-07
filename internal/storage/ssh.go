@@ -276,7 +276,21 @@ func (s *SSHStorage) RunWithIO(ctx context.Context, name string, args []string, 
 	}
 
 	cmd := name + " " + strings.Join(escapedArgs, " ")
-	return session.Run(cmd)
+
+	errChan := make(chan error, 1)
+	go func() {
+		errChan <- session.Run(cmd)
+	}()
+
+	select {
+	case <-ctx.Done():
+		// Attempt graceful termination if context is canceled
+		session.Signal(ssh.SIGTERM)
+		session.Close()
+		return ctx.Err()
+	case err := <-errChan:
+		return err
+	}
 }
 
 var _ db.Runner = (*SSHStorage)(nil)

@@ -98,9 +98,8 @@ func (s *Scheduler) Start() {
 	s.cron.Start()
 }
 
-func (s *Scheduler) Stop() {
-	ctx := s.cron.Stop()
-	<-ctx.Done()
+func (s *Scheduler) Stop() context.Context {
+	return s.cron.Stop()
 }
 
 func (s *Scheduler) Save() error {

@@ -38,8 +38,8 @@ var rootCmd = &cobra.Command{
 	dbackup version`,
 }
 
-func NewContext(ctx context.Context) (context.Context, context.CancelFunc) {
-	return nil, nil
+func ExecuteContext(ctx context.Context) error {
+	return rootCmd.ExecuteContext(ctx)
 }
 
 var (

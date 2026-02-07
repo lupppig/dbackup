@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/lupppig/dbackup/cmd"
 	apperrors "github.com/lupppig/dbackup/internal/errors"
@@ -16,7 +19,10 @@ const (
 )
 
 func main() {
-	if err := cmd.Execute(); err != nil {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	if err := cmd.ExecuteContext(ctx); err != nil {
 		exitOnError(err)
 	}
 
