@@ -42,3 +42,11 @@ services:
       interval: 30s
       timeout: 20s
       retries: 3
+
+  sftp:
+    image: atmoz/sftp
+    volumes:
+      - ./sftp_upload:/home/user/upload
+    ports:
+      - "2222:22"
+    command: user:password:1001
