@@ -45,7 +45,6 @@ func TestAutoDecompression(t *testing.T) {
 
 	rawData := []byte("SELECT * FROM users; -- raw sql data")
 
-	// Prepare a compressed file manually
 	gzFile := filepath.Join(tempDir, "backup.sql.gz")
 	f, err := os.Create(gzFile)
 	require.NoError(t, err)
@@ -57,7 +56,6 @@ func TestAutoDecompression(t *testing.T) {
 	c.Close()
 	f.Close()
 
-	// Now try to restore it without specifying the algorithm
 	mock := &MockAdapter{}
 
 	opts := backup.BackupOptions{

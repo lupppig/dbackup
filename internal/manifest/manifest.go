@@ -19,6 +19,7 @@ type Manifest struct {
 	Compression string    `json:"compression,omitempty"`
 	Encryption  string    `json:"encryption,omitempty"`
 	CreatedAt   time.Time `json:"created_at"`
+	Size        int64     `json:"size,omitempty"`   // Total size of the backup blob
 	Chunks      []string  `json:"chunks,omitempty"` // SHA-256 hashes for dedupe
 }
 

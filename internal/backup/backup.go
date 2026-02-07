@@ -170,11 +170,33 @@ func (m *BackupManager) Run(ctx context.Context, adapter database.DBAdapter, con
 
 	// Integrity & Manifesting
 	hasher := sha256.New()
-	tr := io.TeeReader(pr, hasher)
+	counter := &ByteCounter{}
 
-	location, err := m.storage.Save(ctx, finalName, tr)
+	p := NewProgressContainer()
+	bar := AddBackupBar(p, "Backup")
+
+	tr1 := io.TeeReader(pr, hasher)
+	tr := io.TeeReader(tr1, counter)
+
+	// need a writer that writes to storage AND updates the progress bar
+	// Actually, storage.Save takes a Reader.
+	// So we need a ProgressReader that wraps the TeeReader.
+	sr := NewProgressReader(tr, bar)
+
+	location, err := m.storage.Save(ctx, finalName, sr)
+	if bar != nil {
+		bar.SetTotal(bar.Current(), true)
+	}
+
 	if err != nil {
+		if p != nil {
+			p.Wait()
+		}
 		return apperrors.Wrap(err, apperrors.TypeResource, "storage save failed", "Check storage permissions and disk space.")
+	}
+
+	if p != nil {
+		p.Wait()
 	}
 
 	if err := <-errChan; err != nil {
@@ -182,6 +204,7 @@ func (m *BackupManager) Run(ctx context.Context, adapter database.DBAdapter, con
 	}
 
 	checksum := hex.EncodeToString(hasher.Sum(nil))
+	totalSize := counter.Count
 
 	encryption := "none"
 	if m.Options.Encrypt {
@@ -196,6 +219,7 @@ func (m *BackupManager) Run(ctx context.Context, adapter database.DBAdapter, con
 	)
 	man.DBName = conn.DBName
 	man.Checksum = checksum
+	man.Size = totalSize
 	man.Version = "0.1.0"
 
 	manBytes, err := man.Serialize()

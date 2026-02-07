@@ -59,7 +59,6 @@ func (m *RestoreManager) Run(ctx context.Context, adapter database.DBAdapter, co
 		return fmt.Errorf("file name is required for restore")
 	}
 
-	// Stats for notification
 	defer func() {
 		if m.Options.Notifier != nil {
 			status := notify.StatusSuccess
@@ -78,8 +77,6 @@ func (m *RestoreManager) Run(ctx context.Context, adapter database.DBAdapter, co
 		}
 	}()
 
-	// Integrity & Manifesting Logic
-	// Step 1: Read Manifest
 	manPath := name
 	if !strings.HasSuffix(name, ".manifest") {
 		manPath = name + ".manifest"
@@ -118,14 +115,28 @@ func (m *RestoreManager) Run(ctx context.Context, adapter database.DBAdapter, co
 		return fmt.Errorf("failed to open backup for restore: %w", err)
 	}
 
+	p := NewProgressContainer()
+	var totalSize int64
+	if man != nil {
+		totalSize = man.Size
+	}
+	bar := AddRestoreBar(p, "Download", totalSize)
+
 	// Hash while downloading
 	hasher := sha256.New()
-	tr := io.TeeReader(r, hasher)
+	pr := NewProgressReader(r, bar)
+	tr := io.TeeReader(pr, hasher)
 
 	if m.Options.Logger != nil {
 		m.Options.Logger.Info("Downloading backup for verification...", "name", name)
 	}
 	_, err = io.Copy(f, tr)
+	if bar != nil {
+		bar.SetTotal(bar.Current(), true)
+	}
+	if p != nil {
+		p.Wait()
+	}
 	r.Close()
 	f.Close()
 	if err != nil {
