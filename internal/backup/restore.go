@@ -222,6 +222,10 @@ func (m *RestoreManager) Run(ctx context.Context, adapter database.DBAdapter, co
 		runner = r
 	}
 
+	if m.Options.DryRun {
+		runner = database.NewDryRunRunner(m.Options.Logger)
+	}
+
 	if err := adapter.RunRestore(ctx, conn, runner, finalReader); err != nil {
 		return fmt.Errorf("database restore failed: %w", err)
 	}

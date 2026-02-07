@@ -17,7 +17,8 @@ import (
 )
 
 var (
-	restoreAuto bool
+	restoreAuto   bool
+	restoreDryRun bool
 )
 
 var restoreCmd = &cobra.Command{
@@ -305,6 +306,7 @@ func doRestore(cmd *cobra.Command, l *logger.Logger, connParams database.Connect
 		EncryptionKeyFile:    encryptionKeyFile,
 		EncryptionPassphrase: encryptionPassphrase,
 		ConfirmRestore:       confirmRestore,
+		DryRun:               restoreDryRun,
 		Logger:               l,
 		Notifier:             notifier,
 	})
@@ -342,6 +344,10 @@ func doRestore(cmd *cobra.Command, l *logger.Logger, connParams database.Connect
 		}
 	}
 
+	if restoreDryRun {
+		runner = database.NewDryRunRunner(l)
+	}
+
 	if err := adapter.TestConnection(cmd.Context(), connParams, runner); err != nil {
 		return err
 	}
@@ -367,4 +373,5 @@ func init() {
 	restoreCmd.Flags().StringVar(&fileName, "name", "", "backup file name to restore")
 	restoreCmd.Flags().StringVarP(&from, "from", "f", "", "unified source URI for restore (alias for --to)")
 	restoreCmd.Flags().BoolVarP(&restoreAuto, "auto", "a", false, "automatically restore latest backups (default if no manifest is specified)")
+	restoreCmd.Flags().BoolVar(&restoreDryRun, "dry-run", false, "simulation mode (don't actually run restore)")
 }

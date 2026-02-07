@@ -107,6 +107,25 @@ func (r *LocalRunner) RunWithIO(ctx context.Context, name string, args []string,
 	return cmd.Run()
 }
 
+type DryRunRunner struct {
+	logger *logger.Logger
+}
+
+func NewDryRunRunner(l *logger.Logger) *DryRunRunner {
+	return &DryRunRunner{logger: l}
+}
+
+func (d *DryRunRunner) Run(ctx context.Context, name string, args []string, w io.Writer) error {
+	return d.RunWithIO(ctx, name, args, nil, w)
+}
+
+func (d *DryRunRunner) RunWithIO(ctx context.Context, name string, args []string, stdin io.Reader, stdout io.Writer) error {
+	if d.logger != nil {
+		d.logger.Info("DRY RUN: would execute command", "command", name, "args", strings.Join(args, " "))
+	}
+	return nil
+}
+
 type DBAdapter interface {
 	Name() string
 	TestConnection(ctx context.Context, conn ConnectionParams, runner Runner) error

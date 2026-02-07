@@ -29,6 +29,7 @@ type BackupOptions struct {
 	EncryptionPassphrase string
 
 	ConfirmRestore bool // Explicitly confirm destructive restore
+	DryRun         bool // Simulation mode
 
 	Logger   *logger.Logger
 	Notifier notify.Notifier
