@@ -1,99 +1,99 @@
 # dbackup
 
-A high-performance, extensible database backup CLI with built-in encryption, scheduling, and remote storage support.
+A high-performance, extensible database backup CLI with built-in encryption, scheduling, and multi-cloud storage support.
 
-## Features
+## 🚀 Overview
 
-- **Multi-Database Support**: PostgreSQL, MySQL, SQLite, Redis
-- **Client-Side Encryption**: AES-256-GCM with PBKDF2 key derivation
-- **Parallel Execution**: Back up multiple databases concurrently (`--parallelism`)
-- **Storage Backends**: Local, SFTP (remote VMs), FTP, Docker volumes
-- **Unified Scheduler**: Cron-style and interval-based recurring backups
-- **Slack Notifications**: Task success/failure alerts via webhook
-- **Integrity Verification**: SHA-256 manifest checksums
+`dbackup` is a modern CLI tool designed to simplify and automate database backup workflows. It focuses on reliability, security, and developer productivity by providing a unified interface for various databases and storage targets.
 
-## Quick Start
+```mermaid
+graph TD
+    CLI[dbackup CLI] -->|Commands| Manager[Backup/Restore Manager]
+    Manager -->|Adapters| DBAdapters[Database Adapters]
+    Manager -->|Encryption| Crypto[AES-256 Crypto]
+    Manager -->|Storage| StorageBackends[Storage Backends]
+
+    DBAdapters --> Postgres[PostgreSQL]
+    DBAdapters --> MySQL[MySQL / MariaDB]
+    DBAdapters --> SQLite[SQLite]
+
+    StorageBackends --> Local[Local Disk]
+    StorageBackends --> SFTP[SFTP / SSH]
+    StorageBackends --> S3[S3 / MinIO]
+    StorageBackends --> FTP[FTP]
+    StorageBackends --> Docker[Docker Volumes]
+```
+
+## ✨ Features
+
+- **Multi-Database Support**: Native integration with PostgreSQL, MySQL/MariaDB, and SQLite.
+- **Multi-Cloud Storage**: Support for Local, SFTP, FTP, Docker, and S3-compatible storage (MinIO, AWS S3).
+- **Client-Side Encryption**: Secure your backups before they leave your system using AES-256-GCM.
+- **Parallel Execution**: Scale your backup window with concurrent operations via `--parallelism`.
+- **Intelligent Scheduling**: Built-in cron-style and interval-based scheduling.
+- **Simulation Mode**: Run dry-run restores to verify your backup strategy without destructive actions.
+- **Environment Doctor**: Diagnoses missing native binaries (pg_dump, mysqldump, etc.) instantly.
+- **Integrity Verification**: Automatic SHA-256 checksumming and manifest verification.
+
+## 📦 Storage Backends
+
+| Backend | URI Format | Notes |
+|---------|------------|-------|
+| **Local** | `./path` or `local://path` | Default storage |
+| **SFTP** | `user@host:/path` or `sftp://user@host/path` | Secure remote storage |
+| **S3 / MinIO**| `s3://ACCESS:SECRET@HOST/BUCKET/PREFIX` | Cloud-native storage |
+| **FTP** | `ftp://user:pass@host/path` | Requires `--allow-insecure` |
+| **Docker** | `docker://container:/path` | Back up to/from containers |
+
+## 🛠 Usage
+
+### Doctor (Environment Check)
+Ensure your system has all required tools installed:
+```bash
+dbackup doctor
+```
 
 ### Backup
 ```bash
-# SQLite backup to local directory
-dbackup backup sqlite --db myapp.db --to ./backups
+# PostgreSQL backup to S3 with encryption
+dbackup backup postgres --db-uri "postgres://user@localhost/app" \
+  --to s3://key:secret@minio:9000/backups \
+  --encrypt --encryption-passphrase "mysecret"
 
-# PostgreSQL backup to remote VM with encryption
-dbackup backup postgres --db-uri "postgres://user:pass@localhost/mydb" \
-  --to user@backup-server:/var/backups \
-  --encrypt --encryption-passphrase "secret"
-
-# Multiple databases in parallel
-dbackup backup postgres://db1 postgres://db2 postgres://db3 --to ./backups --parallelism 3
+# Parallel SQLite backups
+dbackup backup sqlite --db db1.sqlite --db db2.sqlite --to ./backups --parallelism 2
 ```
 
-### Restore
+### Restore (Dry-Run)
+Test your restore without touching the database:
 ```bash
-dbackup restore sqlite --from ./backups/myapp.manifest --db restored.db --confirm-restore
+dbackup restore postgres --from ./backups/prod.manifest --dry-run
 ```
 
-### Scheduling
+## 🗓 Scheduling
+
+Schedule recurring tasks easily:
 ```bash
-# Schedule daily backup at 2 AM (runs in background)
-dbackup schedule backup sqlite --db mydb.db --to user@server:/backups --cron "0 2 * * *" --encrypt
+# Every morning at 3 AM
+dbackup schedule backup mysql --db mydb --to sftp://user@remote:/backups --cron "0 3 * * *"
 
-# Schedule hourly backup
-dbackup schedule backup postgres --db-uri "postgres://..." --to ./backups --interval 1h
-
-# List scheduled tasks
-dbackup schedule list
-
-# Remove a scheduled task
-dbackup schedule remove <TASK_ID>
+# Every hour
+dbackup schedule backup sqlite --db app.db --to ./backups --interval 1h
 ```
 
-## Security
+## 🔒 Security
 
-| Feature | Implementation |
-|---------|---------------|
-| Encryption | AES-256-GCM |
-| Key Derivation | PBKDF2 |
-| Integrity | SHA-256 manifests |
-| Secret Handling | Never logged, env var support (`DBACKUP_KEY`) |
-| Restore Safety | Requires `--confirm-restore` |
+- **AES-256-GCM**: Industry-standard authenticated encryption for data at rest.
+- **PBKDF2**: Secure key derivation from passphrases.
+- **Zero-Leaking Logs**: Passwords and keys are automatically scrubbed from logs and terminals.
 
-## Storage Backends
-
-| Backend | URI Format |
-|---------|------------|
-| Local | `./path` or `local://path` |
-| SFTP | `user@host:/path` or `sftp://user@host/path` |
-| FTP | `ftp://user:pass@host/path` (requires `--allow-insecure`) |
-| Docker | `docker://container:/path` |
-
-## Flags
-
-| Flag | Description |
-|------|-------------|
-| `--parallelism` | Number of concurrent backup/restore operations |
-| `--encrypt` | Enable AES-256-GCM encryption |
-| `--encryption-key-file` | Path to 32-byte key file |
-| `--encryption-passphrase` | Passphrase for key derivation |
-| `--cron` | Cron expression for scheduling |
-| `--interval` | Interval for scheduling (e.g., `1h`, `30m`) |
-| `--slack-webhook` | Slack webhook URL for notifications |
-| `--confirm-restore` | Required for restore operations |
-| `--verify` | Verify backup integrity after completion |
-
-## Development
+## 🔨 Development
 
 ```bash
-# Build
 go build -o dbackup .
-
-# Test
 go test ./...
-
-# Run all tests with verbose output
-go test -v ./...
 ```
 
-## License
+## 📄 License
 
 MIT License
