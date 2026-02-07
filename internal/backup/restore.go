@@ -93,7 +93,7 @@ func (m *RestoreManager) Run(ctx context.Context, adapter database.DBAdapter, co
 	}
 
 	// Use a sub-context with a timeout for the metadata check to avoid long hangs
-	metaCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	metaCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	manBytes, err := m.storage.GetMetadata(metaCtx, manPath)
 	cancel()
 
@@ -126,7 +126,7 @@ func (m *RestoreManager) Run(ctx context.Context, adapter database.DBAdapter, co
 		m.Options.Logger.Debug("Opening storage and downloading...", "uri", m.Options.StorageURI, "file", name)
 	}
 
-	// Step 2: Download to temporary workspace for verification
+	// Download to temporary workspace for verification
 	tmpDir, err := os.MkdirTemp("", "dbackup-restore-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temporary workspace: %w", err)
@@ -148,10 +148,16 @@ func (m *RestoreManager) Run(ctx context.Context, adapter database.DBAdapter, co
 		return fmt.Errorf("failed to open backup for restore: %w", err)
 	}
 
-	p := m.Options.Progress
 	var totalSize int64
 	if man != nil {
 		totalSize = man.Size
+	}
+
+	p := m.Options.Progress
+	shouldWait := false
+	if p == nil {
+		p = NewProgressContainer()
+		shouldWait = true
 	}
 	bar := AddRestoreBar(p, "Download", totalSize)
 
@@ -167,8 +173,12 @@ func (m *RestoreManager) Run(ctx context.Context, adapter database.DBAdapter, co
 	if bar != nil {
 		bar.SetTotal(bar.Current(), true)
 	}
+
+	if shouldWait && p != nil {
+		p.Wait()
+	}
 	// Do not call p.Wait() here if it's shared, as the caller (dumpCmd) will wait at the end
-	// or we wait only if we created it.
+	// Wait only if created locally.
 	// Actually, dumpCmd waits at the end of immediate tasks.
 	r.Close()
 	f.Close()
@@ -185,7 +195,7 @@ func (m *RestoreManager) Run(ctx context.Context, adapter database.DBAdapter, co
 		return apperrors.Wrap(err, apperrors.TypeResource, "failed to download backup", msg)
 	}
 
-	// Step 3: Verify Integrity
+	// Verify Integrity
 	if man != nil {
 		actualChecksum := hex.EncodeToString(hasher.Sum(nil))
 		if man.Checksum != "" && man.Checksum != actualChecksum {
@@ -196,7 +206,7 @@ func (m *RestoreManager) Run(ctx context.Context, adapter database.DBAdapter, co
 		}
 	}
 
-	// Step 4: Perform Restoration from temp file
+	// Perform Restoration from temp file
 	f, err = os.Open(tmpFile)
 	if err != nil {
 		return fmt.Errorf("failed to open temp file for reading: %w", err)

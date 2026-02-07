@@ -92,7 +92,6 @@ func (c *Chunker) Next() ([]byte, error) {
 	var buf []byte
 	var hash uint64
 
-	// 1. Read minimum chunk size
 	for len(buf) < minChunkSize {
 		b, err := c.r.ReadByte()
 		if err != nil {
@@ -105,8 +104,6 @@ func (c *Chunker) Next() ([]byte, error) {
 		hash = (hash << 1) ^ gear[b]
 	}
 
-	// 2. Scan for boundary using rolling hash
-	// Mask for ~16KB average
 	mask := uint64(0x3FFF)
 
 	for len(buf) < maxChunkSize {

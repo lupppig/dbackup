@@ -36,7 +36,7 @@ func (m *PruneManager) Prune(ctx context.Context) error {
 	}
 
 	// List all manifests
-	// We use prefix based on DBType and DBName if possible, or just list all backups
+	//  prefix based on DBType and DBName if possible, or just list all backups
 	// Based on DedupeStorage, manifests are in backups/
 	// Based on BackupManager, they are at the root or target dir.
 	// Let's list all .manifest files.

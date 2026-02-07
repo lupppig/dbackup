@@ -54,7 +54,7 @@ func New(w io.Writer, algo Algorithm) (*Compressor, error) {
 		return c, nil
 	}
 
-	// For very large datasets, we avoid TAR and temp files unless explicitly requested.
+	// For very large datasets, TAR and temp files are avoided unless explicitly requested.
 	// If the user wants a single compressed stream, they get it directly.
 	if algo == Tar {
 		c.Tar = tar.NewWriter(w)
@@ -159,7 +159,7 @@ func NewReader(r io.Reader, algo Algorithm) (*Decompressor, error) {
 	var closer io.Closer
 
 	// Important: Our New() now streams directly.
-	// If the user wants to decompress, we should wrap the reader 'r' directly.
+	// Wrap the reader 'r' directly for decompression.
 	switch algo {
 	case Gzip:
 		gz, err := gzip.NewReader(r)

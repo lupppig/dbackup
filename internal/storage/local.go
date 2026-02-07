@@ -31,7 +31,7 @@ func (s *LocalStorage) Save(ctx context.Context, name string, r io.Reader) (stri
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp file: %w", err)
 	}
-	defer os.Remove(tmpPath) // Cleanup if we fail
+	defer os.Remove(tmpPath) // Cleanup on failure
 
 	if _, err := io.Copy(f, r); err != nil {
 		f.Close()

@@ -67,7 +67,7 @@ func TestPruneManager_Prune(t *testing.T) {
 	ms.On("GetMetadata", ctx, "b2.manifest").Return(m2b, nil)
 	ms.On("GetMetadata", ctx, "b3.manifest").Return(m3b, nil)
 
-	// We expect to keep 2, so b1 should be deleted (it's the oldest)
+	// Expected retention of 2 backups: b1 should be deleted as it is the oldest.
 	ms.On("Delete", ctx, "b1").Return(nil)
 	ms.On("Delete", ctx, "b1.manifest").Return(nil)
 

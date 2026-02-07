@@ -19,7 +19,7 @@ func NewProgressWriter(w io.Writer, bar *mpb.Bar) *ProgressWriter {
 
 func (pw *ProgressWriter) Write(p []byte) (int, error) {
 	n, err := pw.w.Write(p)
-	if n > 0 {
+	if n > 0 && pw.bar != nil {
 		pw.bar.IncrBy(n)
 	}
 	return n, err
@@ -36,7 +36,7 @@ func NewProgressReader(r io.Reader, bar *mpb.Bar) *ProgressReader {
 
 func (pr *ProgressReader) Read(p []byte) (int, error) {
 	n, err := pr.r.Read(p)
-	if n > 0 {
+	if n > 0 && pr.bar != nil {
 		pr.bar.IncrBy(n)
 	}
 	return n, err
@@ -53,7 +53,7 @@ func (bc *ByteCounter) Write(p []byte) (int, error) {
 }
 
 func NewProgressContainer() *mpb.Progress {
-	// In the future, we can add a check for os.Stdout TTY status
+	// Future enhancement: Add check for os.Stdout TTY status
 	return mpb.New(mpb.WithWidth(64))
 }
 

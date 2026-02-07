@@ -185,7 +185,7 @@ func (m *BackupManager) Run(ctx context.Context, adapter database.DBAdapter, con
 
 	// need a writer that writes to storage AND updates the progress bar
 	// Actually, storage.Save takes a Reader.
-	// So we need a ProgressReader that wraps the TeeReader.
+	// ProgressReader wraps the TeeReader.
 	sr := NewProgressReader(tr, bar)
 
 	location, err := m.storage.Save(ctx, finalName, sr)

@@ -149,8 +149,8 @@ func (ma *MysqlAdapter) ensureTLSConfig(cfg TLSConfig) (string, error) {
 }
 
 func (ma *MysqlAdapter) RunBackup(ctx context.Context, conn ConnectionParams, runner Runner, w io.Writer) error {
-	// 1. Resolve Backup Mode (Logical vs Physical)
-	// We default to 'logical' for MySQL unless physical is requested.
+	// Resolve Backup Mode (Logical vs Physical)
+	// Defaults to 'logical' for MySQL unless physical is requested.
 	mode := "logical"
 
 	if conn.Port == 0 {

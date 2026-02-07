@@ -60,7 +60,7 @@ func (s *SSHStorage) connect() error {
 	if pass != "" {
 		config.Auth = append(config.Auth, ssh.Password(pass))
 	} else {
-		// 1. Try SSH Agent
+		// Try SSH Agent
 		if authSock := os.Getenv("SSH_AUTH_SOCK"); authSock != "" {
 			if conn, err := net.Dial("unix", authSock); err == nil {
 				ag := agent.NewClient(conn)
@@ -71,7 +71,7 @@ func (s *SSHStorage) connect() error {
 			}
 		}
 
-		// 2. Try common private keys
+		// Try common private keys
 		home, err := os.UserHomeDir()
 		if err == nil {
 			commonKeys := []string{"id_rsa", "id_ed25519", "id_ecdsa"}

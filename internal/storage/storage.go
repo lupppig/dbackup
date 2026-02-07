@@ -22,7 +22,7 @@ func FromURI(uriStr string, opts StorageOptions) (Storage, error) {
 	if !strings.Contains(uriStr, "://") {
 		// Heuristic to detect SSH/SFTP shorthand like user@host:path or user@host
 		if strings.Contains(uriStr, "@") {
-			// If it contains ':', we need to be careful.
+			// Handle characters like ':' in the path carefully.
 			// user@host:path -> colon after @
 			// user:pass@host -> colon before @
 			atIndex := strings.Index(uriStr, "@")
@@ -41,7 +41,7 @@ func FromURI(uriStr string, opts StorageOptions) (Storage, error) {
 				uriStr = "sftp://" + uriStr
 			}
 			// If colonIndex < atIndex, it's likely user:pass@host, which REQUIRES a scheme to be a valid URI.
-			// We skip it and let url.Parse fail or treat it as local if it's ambiguous.
+			// Skip and allow url.Parse to fail or treat as local if ambiguous.
 		} else if strings.HasPrefix(uriStr, "docker:") {
 			// Inferred Docker: docker:container[:path]
 			trimmed := strings.TrimPrefix(uriStr, "docker:")
@@ -59,7 +59,7 @@ func FromURI(uriStr string, opts StorageOptions) (Storage, error) {
 	}
 
 	// Use a simple fmt for internal debug since logger isn't available here yet
-	// Or we can just let it fail and see the wrapped error
+	// Allow failure and capture wrapped error.
 	u, err := url.Parse(uriStr)
 	if err != nil {
 		return nil, apperrors.Wrap(err, apperrors.TypeConfig, "failed to parse storage URI: "+uriStr, "Check the syntax of your --to target.")

@@ -38,7 +38,7 @@ var dumpCmd = &cobra.Command{
 
 		ctx := context.Background()
 
-		// Check if we should start the scheduler
+		// Determine if scheduler should start.
 		hasSchedule := false
 		for _, b := range conf.Backups {
 			if b.Schedule != "" || b.Interval != "" {
@@ -148,7 +148,7 @@ var dumpCmd = &cobra.Command{
 		sem := make(chan struct{}, conf.Parallelism)
 		var wg sync.WaitGroup
 
-		// Step 1: Execute Backups in Parallel
+		// Execute Backups in Parallel
 		backupCount := 0
 		for _, b := range conf.Backups {
 			if b.Schedule != "" || b.Interval != "" {
@@ -195,7 +195,7 @@ var dumpCmd = &cobra.Command{
 		wg.Wait()
 		l.Info("All backups completed. Starting sequential restores if any.")
 
-		// Step 2: Execute Restores Sequentially
+		// Execute Restores Sequentially
 		for _, r := range conf.Restores {
 			if r.Schedule != "" || r.Interval != "" {
 				continue

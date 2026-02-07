@@ -110,7 +110,7 @@ func (s *S3Storage) Save(ctx context.Context, name string, r io.Reader) (string,
 		}
 	}
 
-	// If size is unknown, buffer to a temporary file to ensure we have a known size
+	// If size is unknown, buffer to a temporary file to ensure known size
 	// and avoid high memory pressure from minio-go's internal buffering.
 	if size == -1 {
 		tmpFile, err := os.CreateTemp("", "dbackup-s3-upload-*")
