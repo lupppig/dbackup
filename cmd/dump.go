@@ -139,11 +139,9 @@ var dumpCmd = &cobra.Command{
 
 			l.Info("Scheduler started. Press Ctrl+C to stop.")
 			s.Start()
-			// Block indefinitely to keep the scheduler running
 			select {}
 		}
 
-		// Run immediate tasks in parallel
 		l.Info("Executing immediate tasks", "parallelism", conf.Parallelism)
 
 		sem := make(chan struct{}, conf.Parallelism)
