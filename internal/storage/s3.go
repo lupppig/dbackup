@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/minio/minio-go/v7"
@@ -66,12 +67,45 @@ func NewS3Storage(u *url.URL) (*S3Storage, error) {
 func (s *S3Storage) Save(ctx context.Context, name string, r io.Reader) (string, error) {
 	objectName := s.getObjectName(name)
 
-	// We might need to handle large uploads, but for now we use PutObject
-	// For better performance with unknown sizes, we might need to wrap r in a temporary file
-	// or use a buffer. Minio-go can handle some of this.
+	var size int64 = -1
+	var readerToUpload io.Reader = r
 
-	// Since we don't know the size, we set it to -1 (minio-go will use multipart upload)
-	_, err := s.client.PutObject(ctx, s.bucketName, objectName, r, -1, minio.PutObjectOptions{
+	// Try to determine size if possible
+	switch v := r.(type) {
+	case *bytes.Buffer:
+		size = int64(v.Len())
+	case *bytes.Reader:
+		size = int64(v.Len())
+	case *strings.Reader:
+		size = int64(v.Len())
+	case *os.File:
+		if fi, err := v.Stat(); err == nil {
+			size = fi.Size()
+		}
+	}
+
+	// If size is unknown, buffer to a temporary file to ensure we have a known size
+	// and avoid high memory pressure from minio-go's internal buffering.
+	if size == -1 {
+		tmpFile, err := os.CreateTemp("", "dbackup-s3-upload-*")
+		if err != nil {
+			return "", fmt.Errorf("failed to create temporary file for S3 upload: %w", err)
+		}
+		defer os.Remove(tmpFile.Name())
+		defer tmpFile.Close()
+
+		size, err = io.Copy(tmpFile, r)
+		if err != nil {
+			return "", fmt.Errorf("failed to buffer stream to temporary file: %w", err)
+		}
+
+		if _, err := tmpFile.Seek(0, 0); err != nil {
+			return "", fmt.Errorf("failed to seek to start of temporary file: %w", err)
+		}
+		readerToUpload = tmpFile
+	}
+
+	_, err := s.client.PutObject(ctx, s.bucketName, objectName, readerToUpload, size, minio.PutObjectOptions{
 		ContentType: "application/octet-stream",
 	})
 	if err != nil {

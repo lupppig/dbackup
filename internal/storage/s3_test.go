@@ -103,4 +103,22 @@ func TestS3Storage_Integration(t *testing.T) {
 		_, err = s.client.StatObject(ctx, s.bucketName, s.getObjectName(name), minio.StatObjectOptions{})
 		assert.Error(t, err)
 	})
+
+	t.Run("SaveAndOpen_UnknownSize", func(t *testing.T) {
+		content := []byte("hello s3 with unknown size")
+		name := "test_unknown.txt"
+		// Wrap in a plain io.Reader to hide the size
+		wrappedReader := struct{ io.Reader }{bytes.NewReader(content)}
+		path, err := s.Save(ctx, name, wrappedReader)
+		assert.NoError(t, err)
+		assert.Contains(t, path, name)
+
+		r, err := s.Open(ctx, name)
+		assert.NoError(t, err)
+		defer r.Close()
+
+		got, err := io.ReadAll(r)
+		assert.NoError(t, err)
+		assert.Equal(t, content, got)
+	})
 }
