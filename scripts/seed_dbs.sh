@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # Helper function to wait for a container to be running
 wait_for_container() {
   local service=$1
@@ -46,8 +48,6 @@ EOF
 # Create MinIO Bucket
 wait_for_container minio
 echo "Creating MinIO bucket 'backups'..."
-# Use mc inside a container but skip the wait loop that uses 'nc' (which might be missing)
-# Instead, rely on the 15s sleep in simulate.sh and our wait_for_container helper
 docker run --net=host --entrypoint=/bin/sh minio/mc -c "
   mc alias set myminio http://localhost:9000 minioadmin minioadmin;
   mc mb --ignore-existing myminio/backups;

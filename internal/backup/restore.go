@@ -34,6 +34,11 @@ func NewRestoreManager(opts BackupOptions) (*RestoreManager, error) {
 		return nil, err
 	}
 
+	// Wrap with dedupe storage if enabled
+	if opts.Dedupe {
+		s = storage.NewDedupeStorage(s)
+	}
+
 	return &RestoreManager{
 		Options: opts,
 		storage: s,
@@ -54,9 +59,14 @@ func (m *RestoreManager) Run(ctx context.Context, adapter database.DBAdapter, co
 	}
 
 	start := time.Now()
+	if err := conn.ParseURI(); err != nil {
+		if m.Options.Logger != nil {
+			m.Options.Logger.Warn("Failed to parse DB URI", "error", err)
+		}
+	}
 	name := m.Options.FileName
 	if name == "" {
-		return fmt.Errorf("file name is required for restore")
+		name = "latest.manifest"
 	}
 
 	defer func() {
@@ -81,8 +91,16 @@ func (m *RestoreManager) Run(ctx context.Context, adapter database.DBAdapter, co
 	if !strings.HasSuffix(name, ".manifest") {
 		manPath = name + ".manifest"
 	}
-	manBytes, err := m.storage.GetMetadata(ctx, manPath)
+
+	// Use a sub-context with a timeout for the metadata check to avoid long hangs
+	metaCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	manBytes, err := m.storage.GetMetadata(metaCtx, manPath)
+	cancel()
+
 	if err != nil {
+		if m.Options.FileName == "" || name == "latest.manifest" {
+			return fmt.Errorf("default manifest %s not found and no specific file provided: %w", manPath, err)
+		}
 		if m.Options.Logger != nil {
 			m.Options.Logger.Warn("Manifest not found for backup, skipping integrity check", "file", name)
 		}
@@ -91,6 +109,21 @@ func (m *RestoreManager) Run(ctx context.Context, adapter database.DBAdapter, co
 	var man *manifest.Manifest
 	if err == nil {
 		man, _ = manifest.Deserialize(manBytes)
+		if man != nil {
+			if man.Engine != "" && !strings.EqualFold(man.Engine, conn.DBType) {
+				return fmt.Errorf("engine mismatch: manifest is for %s but restoring to %s", man.Engine, conn.DBType)
+			}
+			if man.FileName != "" {
+				if m.Options.Logger != nil {
+					m.Options.Logger.Info("Manifest resolved backup file", "manifest", name, "backup", man.FileName)
+				}
+				name = man.FileName
+			}
+		}
+	}
+
+	if m.Options.Logger != nil {
+		m.Options.Logger.Debug("Opening storage and downloading...", "uri", m.Options.StorageURI, "file", name)
 	}
 
 	// Step 2: Download to temporary workspace for verification
@@ -115,7 +148,7 @@ func (m *RestoreManager) Run(ctx context.Context, adapter database.DBAdapter, co
 		return fmt.Errorf("failed to open backup for restore: %w", err)
 	}
 
-	p := NewProgressContainer()
+	p := m.Options.Progress
 	var totalSize int64
 	if man != nil {
 		totalSize = man.Size
@@ -128,19 +161,28 @@ func (m *RestoreManager) Run(ctx context.Context, adapter database.DBAdapter, co
 	tr := io.TeeReader(pr, hasher)
 
 	if m.Options.Logger != nil {
-		m.Options.Logger.Info("Downloading backup for verification...", "name", name)
+		m.Options.Logger.Info("Downloading backup file...", "name", name, "size", totalSize)
 	}
 	_, err = io.Copy(f, tr)
 	if bar != nil {
 		bar.SetTotal(bar.Current(), true)
 	}
-	if p != nil {
-		p.Wait()
-	}
+	// Do not call p.Wait() here if it's shared, as the caller (dumpCmd) will wait at the end
+	// or we wait only if we created it.
+	// Actually, dumpCmd waits at the end of immediate tasks.
 	r.Close()
 	f.Close()
 	if err != nil {
-		return apperrors.Wrap(err, apperrors.TypeResource, "failed to download backup", "Check storage connectivity and file existence.")
+		msg := "Check storage connectivity and file existence."
+		// Check if it's a timeout or connection error
+		isTimeout := strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "deadline") || strings.Contains(err.Error(), "refused")
+		if ctx.Err() == nil && !isTimeout {
+			// Only try to list files if it's likely a 404/Not Found, to avoid doubling the timeout
+			if files, listErr := m.storage.ListMetadata(ctx, ""); listErr == nil && len(files) > 0 {
+				msg = fmt.Sprintf("Target file not found. Available files: %s", strings.Join(files, ", "))
+			}
+		}
+		return apperrors.Wrap(err, apperrors.TypeResource, "failed to download backup", msg)
 	}
 
 	// Step 3: Verify Integrity

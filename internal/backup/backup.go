@@ -172,7 +172,12 @@ func (m *BackupManager) Run(ctx context.Context, adapter database.DBAdapter, con
 	hasher := sha256.New()
 	counter := &ByteCounter{}
 
-	p := NewProgressContainer()
+	p := m.Options.Progress
+	shouldWait := false
+	if p == nil {
+		p = NewProgressContainer()
+		shouldWait = true
+	}
 	bar := AddBackupBar(p, "Backup")
 
 	tr1 := io.TeeReader(pr, hasher)
@@ -195,7 +200,7 @@ func (m *BackupManager) Run(ctx context.Context, adapter database.DBAdapter, con
 		return apperrors.Wrap(err, apperrors.TypeResource, "storage save failed", "Check storage permissions and disk space.")
 	}
 
-	if p != nil {
+	if shouldWait && p != nil {
 		p.Wait()
 	}
 
@@ -218,6 +223,10 @@ func (m *BackupManager) Run(ctx context.Context, adapter database.DBAdapter, con
 		encryption,
 	)
 	man.DBName = conn.DBName
+	man.FileName = finalName
+	if cs, ok := m.storage.(storage.ChunkedStorage); ok {
+		man.Chunks = cs.LastChunks()
+	}
 	man.Checksum = checksum
 	man.Size = totalSize
 	man.Version = "0.1.0"
@@ -225,6 +234,11 @@ func (m *BackupManager) Run(ctx context.Context, adapter database.DBAdapter, con
 	manBytes, err := man.Serialize()
 	if err == nil {
 		_ = m.storage.PutMetadata(ctx, finalName+".manifest", manBytes)
+		_ = m.storage.PutMetadata(ctx, "latest.manifest", manBytes)
+		if m.Options.Logger != nil {
+			m.Options.Logger.Info("Manifest saved", "file", finalName+".manifest")
+			m.Options.Logger.Info("Latest manifest updated", "file", "latest.manifest")
+		}
 	}
 
 	// Trigger pruning

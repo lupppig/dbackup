@@ -78,7 +78,7 @@ and streams it directly into the database engine.`,
 				s = storage.NewDedupeStorage(s)
 			}
 
-			files, err := s.ListMetadata(cmd.Context(), "backups/")
+			files, err := s.ListMetadata(cmd.Context(), "")
 			if err != nil {
 				return fmt.Errorf("failed to list manifests: %w", err)
 			}

@@ -17,7 +17,8 @@ sleep 15
 echo "Step 3: Seeding databases with test data..."
 ./scripts/seed_dbs.sh
 
-# 4. Launch dbackup dump
-echo "Step 4: Launching dbackup dump with minute-based schedules..."
+# 4. Launch dbackup dump (Scheduled Mode)
+echo "Step 4: Launching dbackup dump in SCHEDULED mode..."
+echo "Using config: ~/.dbackup/backup.yaml"
 echo "Press Ctrl+C to stop the simulation."
 go run main.go dump --config ~/.dbackup/backup.yaml

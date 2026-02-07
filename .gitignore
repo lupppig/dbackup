@@ -43,3 +43,4 @@ stress-test.sqlite
 stress-test.sqlite3
 ._stress
 bin
+test_backups

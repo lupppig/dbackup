@@ -75,39 +75,49 @@ func (s *LocalStorage) GetMetadata(ctx context.Context, name string) ([]byte, er
 
 func (s *LocalStorage) ListMetadata(ctx context.Context, prefix string) ([]string, error) {
 	searchDir := s.baseDir
-	basePrefix := prefix
-
-	if strings.Contains(prefix, "/") {
+	if prefix != "" {
 		if strings.HasSuffix(prefix, "/") {
 			searchDir = filepath.Join(s.baseDir, prefix)
-			basePrefix = ""
 		} else {
 			searchDir = filepath.Join(s.baseDir, filepath.Dir(prefix))
-			basePrefix = filepath.Base(prefix)
 		}
-	}
-
-	entries, err := os.ReadDir(searchDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
 	}
 
 	var files []string
-	for _, entry := range entries {
-		if !entry.IsDir() && (basePrefix == "" || strings.HasPrefix(entry.Name(), basePrefix)) {
-			relDir := ""
-			if strings.Contains(prefix, "/") {
-				if strings.HasSuffix(prefix, "/") {
-					relDir = prefix
-				} else {
-					relDir = filepath.Dir(prefix) + "/"
-				}
+	err := filepath.WalkDir(searchDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			if os.IsNotExist(err) && path == searchDir {
+				return nil
 			}
-			files = append(files, relDir+entry.Name())
+			return err
 		}
-	}
-	return files, nil
+
+		if d.IsDir() {
+			// Skip chunks folder unless specifically searching it
+			if d.Name() == "chunks" && !strings.Contains(prefix, "chunks") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		rel, err := filepath.Rel(s.baseDir, path)
+		if err != nil {
+			return nil
+		}
+
+		// Normalize to forward slashes for cross-platform consistency
+		rel = filepath.ToSlash(rel)
+
+		// Apply prefix filter on base name if prefix is not a directory
+		if prefix != "" && !strings.HasSuffix(prefix, "/") {
+			if !strings.HasPrefix(rel, prefix) {
+				return nil
+			}
+		}
+
+		files = append(files, rel)
+		return nil
+	})
+
+	return files, err
 }

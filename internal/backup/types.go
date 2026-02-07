@@ -7,6 +7,7 @@ import (
 
 	"github.com/lupppig/dbackup/internal/logger"
 	"github.com/lupppig/dbackup/internal/notify"
+	"github.com/vbauerster/mpb/v8"
 )
 
 type BackupOptions struct {
@@ -33,6 +34,7 @@ type BackupOptions struct {
 
 	Logger   *logger.Logger
 	Notifier notify.Notifier
+	Progress *mpb.Progress
 }
 
 type BackupProcess interface {

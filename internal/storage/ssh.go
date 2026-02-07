@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/lupppig/dbackup/internal/db"
 	apperrors "github.com/lupppig/dbackup/internal/errors"
@@ -27,8 +28,8 @@ type SSHStorage struct {
 
 func NewSSHStorage(u *url.URL) (*SSHStorage, error) {
 	host := u.Host
-	if !strings.Contains(host, ":") {
-		host = host + ":22"
+	if !strings.Contains(host, ":") || strings.HasSuffix(host, ":") {
+		host = strings.TrimSuffix(host, ":") + ":22"
 	}
 
 	remotePath := u.Path
@@ -53,6 +54,7 @@ func (s *SSHStorage) connect() error {
 		User:            user,
 		Auth:            []ssh.AuthMethod{},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         10 * time.Second,
 	}
 
 	if pass != "" {
@@ -130,7 +132,12 @@ func (s *SSHStorage) Open(ctx context.Context, name string) (io.ReadCloser, erro
 	if err := s.connect(); err != nil {
 		return nil, err
 	}
-	return s.sftpClient.Open(filepath.Join(s.remotePath, name))
+	path := filepath.Join(s.remotePath, name)
+	f, err := s.sftpClient.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file %s: %w", path, err)
+	}
+	return f, nil
 }
 
 func (s *SSHStorage) Delete(ctx context.Context, name string) error {
@@ -168,7 +175,7 @@ func (s *SSHStorage) GetMetadata(ctx context.Context, name string) ([]byte, erro
 	path := filepath.Join(s.remotePath, name)
 	f, err := s.sftpClient.Open(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open metadata %s: %w", path, err)
 	}
 	defer f.Close()
 	return io.ReadAll(f)
@@ -178,39 +185,53 @@ func (s *SSHStorage) ListMetadata(ctx context.Context, prefix string) ([]string,
 	if err := s.connect(); err != nil {
 		return nil, err
 	}
-	searchDir := s.remotePath
-	basePrefix := prefix
 
-	if strings.Contains(prefix, "/") {
+	searchDir := s.remotePath
+	if prefix != "" {
 		if strings.HasSuffix(prefix, "/") {
 			searchDir = filepath.Join(s.remotePath, prefix)
-			basePrefix = ""
 		} else {
 			searchDir = filepath.Join(s.remotePath, filepath.Dir(prefix))
-			basePrefix = filepath.Base(prefix)
 		}
-	}
-
-	entries, err := s.sftpClient.ReadDir(searchDir)
-	if err != nil {
-		return nil, nil // Assume dir doesn't exist
 	}
 
 	var files []string
-	for _, entry := range entries {
-		if !entry.IsDir() && (basePrefix == "" || strings.HasPrefix(entry.Name(), basePrefix)) {
-			relDir := ""
-			if strings.Contains(prefix, "/") {
-				if strings.HasSuffix(prefix, "/") {
-					relDir = prefix
-				} else {
-					relDir = filepath.Dir(prefix) + "/"
+	var walk func(dir string) error
+	walk = func(dir string) error {
+		entries, err := s.sftpClient.ReadDir(dir)
+		if err != nil {
+			return nil // Skip inaccessible or non-existent
+		}
+
+		for _, entry := range entries {
+			path := filepath.Join(dir, entry.Name())
+			if entry.IsDir() {
+				// Skip chunks folder for performance
+				if entry.Name() == "chunks" && !strings.Contains(prefix, "chunks") {
+					continue
+				}
+				if err := walk(path); err != nil {
+					return err
+				}
+				continue
+			}
+
+			rel := strings.TrimPrefix(path, s.remotePath)
+			rel = strings.TrimPrefix(rel, "/")
+			rel = filepath.ToSlash(rel)
+
+			if prefix != "" && !strings.HasSuffix(prefix, "/") {
+				if !strings.HasPrefix(rel, prefix) {
+					continue
 				}
 			}
-			files = append(files, relDir+entry.Name())
+			files = append(files, rel)
 		}
+		return nil
 	}
-	return files, nil
+
+	err := walk(searchDir)
+	return files, err
 }
 
 func (s *SSHStorage) Close() error {

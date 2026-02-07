@@ -40,10 +40,10 @@ func (s *SlackNotifier) Notify(ctx context.Context, stats Stats) error {
 		return nil
 	}
 
-	color := "#36a64f" 
+	color := "#36a64f"
 	title := fmt.Sprintf("✅ %s Successful", stats.Operation)
 	if stats.Status == StatusError {
-		color = "#ff0000" 
+		color = "#ff0000"
 		title = fmt.Sprintf("❌ %s Failed", stats.Operation)
 	}
 
@@ -59,8 +59,8 @@ func (s *SlackNotifier) Notify(ctx context.Context, stats Stats) error {
 		Value string `json:"value"`
 		Short bool   `json:"short"`
 	}{
-		{Title: "Engine", Value: stats.Engine, Short: true},
-		{Title: "Database", Value: stats.Database, Short: true},
+		{Title: "DB", Value: stats.Engine, Short: true},
+		{Title: "Name", Value: stats.Database, Short: true},
 		{Title: "File", Value: stats.FileName, Short: false},
 		{Title: "Duration", Value: stats.Duration.String(), Short: true},
 	}

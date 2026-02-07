@@ -11,13 +11,15 @@ import (
 )
 
 type Config struct {
-	Parallelism   int           `mapstructure:"parallelism"`
-	AllowInsecure bool          `mapstructure:"allow_insecure"`
-	LogJSON       bool          `mapstructure:"log_json"`
-	NoColor       bool          `mapstructure:"no_color"`
-	Notifications Notifications `mapstructure:"notifications"`
-	Backups       []TaskConfig  `mapstructure:"backups"`
-	Restores      []TaskConfig  `mapstructure:"restores"`
+	Parallelism          int           `mapstructure:"parallelism"`
+	AllowInsecure        bool          `mapstructure:"allow_insecure"`
+	LogJSON              bool          `mapstructure:"log_json"`
+	NoColor              bool          `mapstructure:"no_color"`
+	Notifications        Notifications `mapstructure:"notifications"`
+	EncryptionPassphrase string        `mapstructure:"encryption_passphrase"`
+	EncryptionKeyFile    string        `mapstructure:"encryption_key_file"`
+	Backups              []TaskConfig  `mapstructure:"backups"`
+	Restores             []TaskConfig  `mapstructure:"restores"`
 }
 
 type Notifications struct {
@@ -40,6 +42,7 @@ type TaskConfig struct {
 	TLS                  TLSConfig `mapstructure:"tls"`
 	To                   string    `mapstructure:"to"`
 	From                 string    `mapstructure:"from"`
+	FileName             string    `mapstructure:"file_name"`
 	RemoteExec           bool      `mapstructure:"remote_exec"`
 	Dedupe               *bool     `mapstructure:"dedupe"` // Use pointer to distinguish between false and default true
 	Compress             bool      `mapstructure:"compress"`
@@ -56,8 +59,11 @@ type TaskConfig struct {
 }
 
 type TLSConfig struct {
-	Enabled bool   `mapstructure:"enabled"`
-	Mode    string `mapstructure:"mode"`
+	Enabled    bool   `mapstructure:"enabled"`
+	Mode       string `mapstructure:"mode"`
+	CACert     string `mapstructure:"ca_cert"`
+	ClientCert string `mapstructure:"client_cert"`
+	ClientKey  string `mapstructure:"client_key"`
 }
 
 var globalConfig *Config

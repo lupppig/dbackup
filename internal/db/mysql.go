@@ -184,6 +184,7 @@ func (ma *MysqlAdapter) runLogicalFull(ctx context.Context, conn ConnectionParam
 		"--single-transaction",
 		"--quick",
 		"--skip-lock-tables",
+		"--no-tablespaces",
 	}
 
 	if conn.TLS.Enabled {
@@ -246,8 +247,17 @@ func (ma *MysqlAdapter) RunRestore(ctx context.Context, conn ConnectionParams, r
 		fmt.Sprintf("--port=%d", conn.Port),
 		fmt.Sprintf("--user=%s", conn.User),
 		fmt.Sprintf("--password=%s", conn.Password),
-		conn.DBName,
 	}
+
+	if conn.TLS.Enabled {
+		if conn.TLS.CACert != "" {
+			args = append(args, fmt.Sprintf("--ssl-ca=%s", conn.TLS.CACert))
+		}
+	} else {
+		args = append(args, "--ssl=OFF")
+	}
+
+	args = append(args, conn.DBName)
 
 	if err := runner.RunWithIO(ctx, "mysql", args, r, nil); err != nil {
 		if strings.Contains(err.Error(), "status 127") || strings.Contains(err.Error(), "executable file not found") {

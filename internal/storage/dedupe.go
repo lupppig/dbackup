@@ -5,27 +5,29 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
-	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/lupppig/dbackup/internal/manifest"
 )
 
 type DedupeStorage struct {
-	inner Storage
+	inner      Storage
+	lastChunks []string
 }
 
 func NewDedupeStorage(inner Storage) *DedupeStorage {
 	return &DedupeStorage{inner: inner}
 }
 
+func (s *DedupeStorage) LastChunks() []string {
+	return s.lastChunks
+}
+
 func (s *DedupeStorage) Save(ctx context.Context, name string, r io.Reader) (string, error) {
 	chunker := NewChunker(r)
-	var chunkHashes []string
+	s.lastChunks = nil
 
 	for {
 		data, err := chunker.Next()
@@ -38,13 +40,13 @@ func (s *DedupeStorage) Save(ctx context.Context, name string, r io.Reader) (str
 
 		hash := sha256.Sum256(data)
 		hashStr := hex.EncodeToString(hash[:])
-		chunkHashes = append(chunkHashes, hashStr)
+		s.lastChunks = append(s.lastChunks, hashStr)
 
 		chunkPath := "chunks/" + hashStr
-		r, err := s.inner.Open(ctx, chunkPath)
+		chk, err := s.inner.Open(ctx, chunkPath)
 		if err == nil {
 			// Exists, skip
-			r.Close()
+			chk.Close()
 		} else {
 			// Assume it doesn't exist, save it
 			_, err = s.inner.Save(ctx, chunkPath, bytes.NewReader(data))
@@ -54,54 +56,25 @@ func (s *DedupeStorage) Save(ctx context.Context, name string, r io.Reader) (str
 		}
 	}
 
-	baseName := filepath.Base(name)
-	engine := strings.Split(baseName, "-")[0]
-	dbName := ""
-	if strings.Contains(baseName, "-") {
-		parts := strings.Split(baseName, "-")
-		if len(parts) > 1 {
-			dbName = parts[1]
-		}
-	}
-
-	m := manifest.Manifest{
-		ID:        fmt.Sprintf("%x", time.Now().UnixNano()),
-		Engine:    engine,
-		DBName:    dbName,
-		Timestamp: name,
-		CreatedAt: time.Now(),
-		Chunks:    chunkHashes,
-		Version:   "0.1.0",
-	}
-
-	manifestData, err := json.Marshal(m)
-	if err != nil {
-		return "", err
-	}
-
-	manifestName := "backups/" + name + ".manifest"
-	err = s.inner.PutMetadata(ctx, manifestName, manifestData)
-	if err != nil {
-		return "", fmt.Errorf("failed to save manifest: %w", err)
-	}
-
-	return s.inner.Location() + "/" + manifestName, nil
+	return s.inner.Location() + "/" + name, nil
 }
 
 func (s *DedupeStorage) Open(ctx context.Context, name string) (io.ReadCloser, error) {
 	manifestName := name
-	if !strings.HasSuffix(name, ".manifest") {
-		manifestName = "backups/" + name + ".manifest"
+	data, err := s.inner.GetMetadata(ctx, manifestName)
+	if err != nil && !strings.HasSuffix(name, ".manifest") {
+		manifestName = name + ".manifest"
+		data, err = s.inner.GetMetadata(ctx, manifestName)
 	}
 
-	data, err := s.inner.GetMetadata(ctx, manifestName)
 	if err != nil {
-		return nil, fmt.Errorf("manifest not found: %w", err)
+		return s.inner.Open(ctx, name)
 	}
 
 	m, err := manifest.Deserialize(data)
-	if err != nil {
-		return nil, err
+	if err != nil || len(m.Chunks) == 0 {
+		// Not a dedupe manifest, try as raw file
+		return s.inner.Open(ctx, name)
 	}
 
 	readers := make([]io.Reader, len(m.Chunks))
@@ -126,11 +99,13 @@ func (s *DedupeStorage) Open(ctx context.Context, name string) (io.ReadCloser, e
 }
 
 func (s *DedupeStorage) Delete(ctx context.Context, name string) error {
+	// Try deleting manifest and chunks?
+	// For now just delete the manifest/name.
 	return s.inner.Delete(ctx, name)
 }
 
 func (s *DedupeStorage) Location() string {
-	return "dedupe://" + s.inner.Location()
+	return s.inner.Location()
 }
 
 func (s *DedupeStorage) PutMetadata(ctx context.Context, name string, data []byte) error {
@@ -142,7 +117,20 @@ func (s *DedupeStorage) GetMetadata(ctx context.Context, name string) ([]byte, e
 }
 
 func (s *DedupeStorage) ListMetadata(ctx context.Context, prefix string) ([]string, error) {
-	return s.inner.ListMetadata(ctx, prefix)
+	files, err := s.inner.ListMetadata(ctx, prefix)
+	if err != nil {
+		return nil, err
+	}
+
+	var filtered []string
+	for _, f := range files {
+		// Skip chunks folder for general listings to avoid performance issues
+		if strings.HasPrefix(f, "chunks/") && !strings.HasPrefix(prefix, "chunks/") {
+			continue
+		}
+		filtered = append(filtered, f)
+	}
+	return filtered, nil
 }
 
 type multiReadCloser struct {

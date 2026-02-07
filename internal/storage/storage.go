@@ -20,23 +20,28 @@ func FromURI(uriStr string, opts StorageOptions) (Storage, error) {
 	}
 
 	if !strings.Contains(uriStr, "://") {
+		// Heuristic to detect SSH/SFTP shorthand like user@host:path or user@host
 		if strings.Contains(uriStr, "@") {
-			if strings.Contains(uriStr, ":") {
+			// If it contains ':', we need to be careful.
+			// user@host:path -> colon after @
+			// user:pass@host -> colon before @
+			atIndex := strings.Index(uriStr, "@")
+			colonIndex := strings.Index(uriStr, ":")
+
+			if colonIndex != -1 && colonIndex > atIndex {
+				// Shorthand user@host:/path or host:/path
 				parts := strings.SplitN(uriStr, ":", 2)
 				if strings.HasPrefix(parts[1], "/") {
 					uriStr = "sftp://" + parts[0] + parts[1]
 				} else {
 					uriStr = "sftp://" + parts[0] + "/./" + parts[1]
 				}
-			} else {
-				// Ambiguous: user@host/path. Treat as relative for convenience.
-				if strings.Contains(uriStr, "/") {
-					parts := strings.SplitN(uriStr, "/", 2)
-					uriStr = "sftp://" + parts[0] + "/./" + parts[1]
-				} else {
-					uriStr = "sftp://" + uriStr
-				}
+			} else if colonIndex == -1 {
+				// Pure user@host
+				uriStr = "sftp://" + uriStr
 			}
+			// If colonIndex < atIndex, it's likely user:pass@host, which REQUIRES a scheme to be a valid URI.
+			// We skip it and let url.Parse fail or treat it as local if it's ambiguous.
 		} else if strings.HasPrefix(uriStr, "docker:") {
 			// Inferred Docker: docker:container[:path]
 			trimmed := strings.TrimPrefix(uriStr, "docker:")
@@ -53,9 +58,11 @@ func FromURI(uriStr string, opts StorageOptions) (Storage, error) {
 		return NewLocalStorage(uriStr), nil
 	}
 
+	// Use a simple fmt for internal debug since logger isn't available here yet
+	// Or we can just let it fail and see the wrapped error
 	u, err := url.Parse(uriStr)
 	if err != nil {
-		return nil, apperrors.Wrap(err, apperrors.TypeConfig, "failed to parse storage URI", "Check the syntax of your --to target.")
+		return nil, apperrors.Wrap(err, apperrors.TypeConfig, "failed to parse storage URI: "+uriStr, "Check the syntax of your --to target.")
 	}
 
 	switch u.Scheme {
@@ -117,4 +124,9 @@ type Storage interface {
 	PutMetadata(ctx context.Context, name string, data []byte) error
 	GetMetadata(ctx context.Context, name string) ([]byte, error)
 	ListMetadata(ctx context.Context, prefix string) ([]string, error)
+}
+
+type ChunkedStorage interface {
+	Storage
+	LastChunks() []string
 }

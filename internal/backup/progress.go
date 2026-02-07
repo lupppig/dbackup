@@ -65,12 +65,12 @@ func AddBackupBar(p *mpb.Progress, name string) *mpb.Bar {
 	}
 	return p.AddBar(0, // Indeterminate
 		mpb.PrependDecorators(
-			decor.Name(name, decor.WC{W: len(name) + 1}),
-			decor.CountersKibiByte("% .2f / % .2f"),
+			decor.Name(name, decor.WC{W: len(name) + 4}),
+			decor.CountersKibiByte("% .2f / % .2f", decor.WC{W: 18}),
 		),
 		mpb.AppendDecorators(
-			decor.Name(" processed"),
-			decor.OnComplete(decor.Name(" [DONE]"), " [FINISH]"),
+			decor.OnComplete(decor.Spinner(nil, decor.WC{W: 5}), " [DONE]"),
+			decor.OnComplete(decor.Name(" processed"), " [FINISHED]"),
 		),
 	)
 }
@@ -81,8 +81,8 @@ func AddRestoreBar(p *mpb.Progress, name string, total int64) *mpb.Bar {
 	}
 	return p.AddBar(total,
 		mpb.PrependDecorators(
-			decor.Name(name, decor.WC{W: len(name) + 1}),
-			decor.Percentage(),
+			decor.Name(name, decor.WC{W: len(name) + 4}),
+			decor.Percentage(decor.WC{W: 8}),
 		),
 		mpb.AppendDecorators(
 			decor.OnComplete(

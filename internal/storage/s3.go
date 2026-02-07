@@ -5,9 +5,12 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/url"
 	"os"
 	"strings"
+
+	"time"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -47,10 +50,33 @@ func NewS3Storage(u *url.URL) (*S3Storage, error) {
 		// endpoint = endpoint + ":9000"
 	}
 
+	transport, err := minio.DefaultTransport(useSSL)
+	if err == nil {
+		transport.DialContext = (&net.Dialer{
+			Timeout:   10 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext
+		transport.ResponseHeaderTimeout = 10 * time.Second
+		transport.IdleConnTimeout = 30 * time.Second
+	}
+
+	region := u.Query().Get("region")
+	if region == "" {
+		region = "us-east-1"
+	}
+
 	client, err := minio.New(endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
-		Secure: useSSL,
+		Creds:        credentials.NewStaticV4(accessKey, secretKey, ""),
+		Secure:       useSSL,
+		Transport:    transport,
+		Region:       region,
+		BucketLookup: minio.BucketLookupPath, // Force path-style to avoid location probes
 	})
+	if err == nil {
+		client.SetAppInfo("dbackup", "1.0.0")
+		// Note: minio-go doesn't have a simple MaxRetries option in minio.Options,
+		// but using a fixed region and our custom transport with DialTimeout handles it.
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize S3 client: %w", err)
 	}
@@ -170,6 +196,12 @@ func (s *S3Storage) ListMetadata(ctx context.Context, prefix string) ([]string, 
 		// Strip the internal prefix to return relative names
 		name := strings.TrimPrefix(obj.Key, s.prefix)
 		name = strings.TrimPrefix(name, "/")
+
+		// Optimization: skip listing chunks unless specifically requested
+		if strings.HasPrefix(name, "chunks/") && !strings.HasPrefix(prefix, "chunks/") {
+			continue
+		}
+
 		files = append(files, name)
 	}
 	return files, nil

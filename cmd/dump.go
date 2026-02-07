@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,12 +14,13 @@ import (
 	"github.com/lupppig/dbackup/internal/notify"
 	"github.com/lupppig/dbackup/internal/scheduler"
 	"github.com/spf13/cobra"
+	"github.com/vbauerster/mpb/v8"
 )
 
 var dumpCmd = &cobra.Command{
 	Use:   "dump",
 	Short: "Execute all backups and restores defined in the config file",
-	Long:  `Reads the configuration file and executes all defined backup and restore tasks in parallel.`,
+	Long:  `Reads the configuration file and executes all defined backup and restore tasks. Backups run in parallel, followed by sequential restores.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		conf := config.GetConfig()
 		if len(conf.Backups) == 0 && len(conf.Restores) == 0 {
@@ -36,7 +38,7 @@ var dumpCmd = &cobra.Command{
 
 		ctx := context.Background()
 
-		// Handle Scheduling if any task has a schedule
+		// Check if we should start the scheduler
 		hasSchedule := false
 		for _, b := range conf.Backups {
 			if b.Schedule != "" || b.Interval != "" {
@@ -60,21 +62,19 @@ var dumpCmd = &cobra.Command{
 				return fmt.Errorf("failed to initialize scheduler: %w", err)
 			}
 
+			// Add backups to scheduler
 			for _, b := range conf.Backups {
 				if b.Schedule == "" && b.Interval == "" {
 					continue
 				}
-
 				taskID := b.ID
 				if taskID == "" {
 					taskID = fmt.Sprintf("backup-%s-%d", b.DB, time.Now().UnixNano())
 				}
-
 				sched := b.Schedule
 				if sched == "" {
 					sched = b.Interval
 				}
-
 				st := &scheduler.ScheduledTask{
 					ID:        taskID,
 					Type:      scheduler.BackupTask,
@@ -93,27 +93,24 @@ var dumpCmd = &cobra.Command{
 						Keep:                 b.Keep,
 					},
 				}
-
 				if err := s.AddTask(st); err != nil {
-					l.Error("Failed to schedule task", "id", taskID, "error", err)
+					l.Error("Failed to schedule backup task", "id", taskID, "error", err)
 				}
 			}
 
+			// Add restores to scheduler
 			for _, r := range conf.Restores {
 				if r.Schedule == "" && r.Interval == "" {
 					continue
 				}
-
 				taskID := r.ID
 				if taskID == "" {
 					taskID = fmt.Sprintf("restore-%s-%d", r.From, time.Now().UnixNano())
 				}
-
 				sched := r.Schedule
 				if sched == "" {
 					sched = r.Interval
 				}
-
 				st := &scheduler.ScheduledTask{
 					ID:        taskID,
 					Type:      scheduler.RestoreTask,
@@ -131,9 +128,8 @@ var dumpCmd = &cobra.Command{
 						ConfirmRestore:       r.ConfirmRestore,
 					},
 				}
-
 				if err := s.AddTask(st); err != nil {
-					l.Error("Failed to schedule task", "id", taskID, "error", err)
+					l.Error("Failed to schedule restore task", "id", taskID, "error", err)
 				}
 			}
 
@@ -144,14 +140,21 @@ var dumpCmd = &cobra.Command{
 
 		l.Info("Executing immediate tasks", "parallelism", conf.Parallelism)
 
+		var p *mpb.Progress
+		if !conf.LogJSON {
+			p = backup.NewProgressContainer()
+		}
+
 		sem := make(chan struct{}, conf.Parallelism)
 		var wg sync.WaitGroup
 
+		// Step 1: Execute Backups in Parallel
+		backupCount := 0
 		for _, b := range conf.Backups {
 			if b.Schedule != "" || b.Interval != "" {
 				continue
 			}
-
+			backupCount++
 			wg.Add(1)
 			go func(b config.TaskConfig) {
 				defer wg.Done()
@@ -159,7 +162,7 @@ var dumpCmd = &cobra.Command{
 				defer func() { <-sem }()
 
 				l.Info("Starting backup task", "id", b.ID)
-				opts := convertToBackupOptions(b, l, notifier)
+				opts := convertToBackupOptions(b, l, notifier, p, *conf)
 				adapter, err := db.GetAdapter(opts.DBType)
 				if err != nil {
 					l.Error("Invalid engine", "id", b.ID, "engine", b.Engine)
@@ -188,54 +191,66 @@ var dumpCmd = &cobra.Command{
 			}(b)
 		}
 
+		// Wait for all backups to finish
+		wg.Wait()
+		l.Info("All backups completed. Starting sequential restores if any.")
+
+		// Step 2: Execute Restores Sequentially
 		for _, r := range conf.Restores {
 			if r.Schedule != "" || r.Interval != "" {
 				continue
 			}
 
-			wg.Add(1)
-			go func(r config.TaskConfig) {
-				defer wg.Done()
-				sem <- struct{}{}
-				defer func() { <-sem }()
+			l.Info("Starting sequential restore task", "id", r.ID)
+			opts := convertToBackupOptions(r, l, notifier, p, *conf)
+			adapter, err := db.GetAdapter(opts.DBType)
+			if err != nil {
+				l.Error("Invalid engine", "id", r.ID, "engine", r.Engine)
+				continue
+			}
 
-				l.Info("Starting restore task", "id", r.ID)
-				opts := convertToBackupOptions(r, l, notifier)
-				adapter, err := db.GetAdapter(opts.DBType)
-				if err != nil {
-					l.Error("Invalid engine", "id", r.ID, "engine", r.Engine)
-					return
-				}
+			rm, err := backup.NewRestoreManager(opts)
+			if err != nil {
+				l.Error("Failed to initialize restore", "id", r.ID, "error", err)
+				continue
+			}
 
-				rm, err := backup.NewRestoreManager(opts)
-				if err != nil {
-					l.Error("Failed to initialize restore", "id", r.ID, "error", err)
-					return
-				}
+			dbUri := r.URI
+			if dbUri == "" {
+				dbUri = r.To
+			}
 
-				conn := db.ConnectionParams{
-					DBType:   opts.DBType,
-					DBName:   opts.DBName,
-					DBUri:    r.URI,
-					Host:     r.Host,
-					User:     r.User,
-					Password: r.Pass,
-					Port:     r.Port,
-				}
+			conn := db.ConnectionParams{
+				DBType:   opts.DBType,
+				DBName:   opts.DBName,
+				DBUri:    dbUri,
+				Host:     r.Host,
+				User:     r.User,
+				Password: r.Pass,
+				Port:     r.Port,
+				TLS: db.TLSConfig{
+					Enabled:    r.TLS.Enabled,
+					Mode:       r.TLS.Mode,
+					CACert:     r.TLS.CACert,
+					ClientCert: r.TLS.ClientCert,
+					ClientKey:  r.TLS.ClientKey,
+				},
+			}
 
-				if err := rm.Run(ctx, adapter, conn); err != nil {
-					l.Error("Restore failed", "id", r.ID, "error", err)
-				}
-			}(r)
+			if err := rm.Run(ctx, adapter, conn); err != nil {
+				l.Error("Restore failed", "id", r.ID, "error", err)
+			}
 		}
 
-		wg.Wait()
+		if p != nil {
+			p.Wait()
+		}
 		l.Info("All immediate tasks completed")
 		return nil
 	},
 }
 
-func convertToBackupOptions(tc config.TaskConfig, l *logger.Logger, n notify.Notifier) backup.BackupOptions {
+func convertToBackupOptions(tc config.TaskConfig, l *logger.Logger, n notify.Notifier, p *mpb.Progress, global config.Config) backup.BackupOptions {
 	retention, _ := time.ParseDuration(tc.Retention)
 
 	dedupe := true
@@ -243,15 +258,43 @@ func convertToBackupOptions(tc config.TaskConfig, l *logger.Logger, n notify.Not
 		dedupe = *tc.Dedupe
 	}
 
+	storageURI := tc.To
+	fileName := tc.FileName
+	if tc.From != "" {
+		storageURI = tc.From
+		// If From is provided, storageURI IS the source manifest or folder
+		if fileName == "" {
+			// Extract filename from URI path
+			parts := strings.Split(storageURI, "/")
+			last := parts[len(parts)-1]
+			if strings.Contains(last, ".") {
+				fileName = last
+			} else {
+				// Default to latest.manifest if it's a folder
+				fileName = "latest.manifest"
+			}
+		}
+	}
+
+	passphrase := tc.EncryptionPassphrase
+	if passphrase == "" {
+		passphrase = global.EncryptionPassphrase
+	}
+	keyFile := tc.EncryptionKeyFile
+	if keyFile == "" {
+		keyFile = global.EncryptionKeyFile
+	}
+
 	return backup.BackupOptions{
 		DBType:               tc.Engine,
 		DBName:               tc.DB,
-		StorageURI:           tc.To,
+		StorageURI:           storageURI,
 		Compress:             tc.Compress,
 		Algorithm:            tc.Algorithm,
+		FileName:             fileName,
 		Encrypt:              tc.Encrypt,
-		EncryptionPassphrase: tc.EncryptionPassphrase,
-		EncryptionKeyFile:    tc.EncryptionKeyFile,
+		EncryptionPassphrase: passphrase,
+		EncryptionKeyFile:    keyFile,
 		RemoteExec:           tc.RemoteExec,
 		Dedupe:               dedupe,
 		Retention:            retention,
@@ -260,6 +303,7 @@ func convertToBackupOptions(tc config.TaskConfig, l *logger.Logger, n notify.Not
 		DryRun:               tc.DryRun,
 		Logger:               l,
 		Notifier:             n,
+		Progress:             p,
 	}
 }
 

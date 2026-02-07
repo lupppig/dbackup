@@ -1,9 +1,0 @@
-{
-  "id": "1891f82b363a8b34",
-  "engine": "sqlite",
-  "dbname": "db1.sqlite",
-  "version": "0.1.0",
-  "checksum": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "encryption": "none",
-  "created_at": "2026-02-07T13:56:33.01040943+01:00"
-}
