@@ -12,7 +12,7 @@ import (
 func TestScheduler_Core(t *testing.T) {
 	s, err := NewScheduler()
 	require.NoError(t, err)
-	defer s.Stop() // Stop cron to prevent hanging
+	defer func() { <-s.Stop().Done() }() // Stop cron and wait for it
 
 	testFile := filepath.Join(s.dataDir, "schedules.json")
 	os.Remove(testFile)
@@ -36,7 +36,7 @@ func TestScheduler_Core(t *testing.T) {
 
 	// Test persistence
 	s2, _ := NewScheduler()
-	defer s2.Stop()
+	defer func() { <-s2.Stop().Done() }()
 	err = s2.Load()
 	require.NoError(t, err)
 	assert.Len(t, s2.ListTasks(), 1)

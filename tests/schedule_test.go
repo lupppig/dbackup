@@ -13,7 +13,7 @@ import (
 func TestScheduler_AddAndList(t *testing.T) {
 	s, err := scheduler.NewScheduler()
 	require.NoError(t, err)
-	defer s.Stop() // Stop cron to prevent hanging
+	defer func() { <-s.Stop().Done() }() // Stop cron and wait for it
 
 	// Ensure clean state for test
 	home, _ := os.UserHomeDir()
@@ -40,7 +40,7 @@ func TestScheduler_AddAndList(t *testing.T) {
 	// Verify persistence
 	s2, err := scheduler.NewScheduler()
 	require.NoError(t, err)
-	defer s2.Stop()
+	defer func() { <-s2.Stop().Done() }()
 	err = s2.Load()
 	require.NoError(t, err)
 	assert.Len(t, s2.ListTasks(), 1)
