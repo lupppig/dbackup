@@ -67,6 +67,8 @@ func FromURI(uriStr string, opts StorageOptions) (Storage, error) {
 		return NewLocalStorage(path), nil
 	case "ssh", "sftp":
 		return NewSSHStorage(u)
+	case "s3", "minio":
+		return NewS3Storage(u)
 	case "ftp":
 		return NewFTPStorage(u, opts)
 	case "docker":

@@ -8,32 +8,35 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/minio/minio-go/v7"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-func TestFTPStorage_Integration(t *testing.T) {
+func TestS3Storage_Integration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
 
 	ctx := context.Background()
 
-	username := "testuser"
-	password := "testpass"
+	accessKey := "minioadmin"
+	secretKey := "minioadmin"
+	bucketName := "testbucket"
+
+	// Start MinIO container
 	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
-			Image: "stilliard/pure-ftpd",
+			Image: "minio/minio",
 			Env: map[string]string{
-				"FTP_USER_NAME": username,
-				"FTP_USER_PASS": password,
-				"FTP_USER_HOME": "/home/testuser",
-				"PUBLICHOST":    "localhost",
+				"MINIO_ACCESS_KEY": accessKey,
+				"MINIO_SECRET_KEY": secretKey,
 			},
-			ExposedPorts: []string{"21/tcp", "30000-30009/tcp"},
-			WaitingFor:   wait.ForLog("Starting Pure-FTPd"),
+			Cmd:          []string{"server", "/data"},
+			ExposedPorts: []string{"9000/tcp"},
+			WaitingFor:   wait.ForHTTP("/minio/health/ready").WithPort("9000/tcp"),
 		},
 		Started: true,
 	})
@@ -42,40 +45,41 @@ func TestFTPStorage_Integration(t *testing.T) {
 
 	host, err := container.Host(ctx)
 	require.NoError(t, err)
-	if host == "localhost" || host == "::1" {
-		host = "127.0.0.1"
-	}
 
-	port, err := container.MappedPort(ctx, "21")
+	port, err := container.MappedPort(ctx, "9000")
 	require.NoError(t, err)
 
-	uri := fmt.Sprintf("ftp://%s:%s@%s:%d/", username, password, host, port.Int())
+	endpoint := fmt.Sprintf("%s:%d", host, port.Int())
+	uri := fmt.Sprintf("s3://%s:%s@%s/%s/backups?ssl=false", accessKey, secretKey, endpoint, bucketName)
 	u, err := url.Parse(uri)
 	require.NoError(t, err)
 
-	s, err := NewFTPStorage(u, StorageOptions{AllowInsecure: true})
+	s, err := NewS3Storage(u)
 	require.NoError(t, err)
-	defer s.Close()
+
+	// Create bucket
+	err = s.client.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{})
+	require.NoError(t, err)
 
 	t.Run("SaveAndOpen", func(t *testing.T) {
-		content := []byte("hello ftp")
+		content := []byte("hello s3")
 		name := "test.txt"
 		path, err := s.Save(ctx, name, bytes.NewReader(content))
 		assert.NoError(t, err)
 		assert.Contains(t, path, name)
 
 		r, err := s.Open(ctx, name)
-		if assert.NoError(t, err) {
-			defer r.Close()
-			got, err := io.ReadAll(r)
-			assert.NoError(t, err)
-			assert.Equal(t, content, got)
-		}
+		assert.NoError(t, err)
+		defer r.Close()
+
+		got, err := io.ReadAll(r)
+		assert.NoError(t, err)
+		assert.Equal(t, content, got)
 	})
 
 	t.Run("MetadataOperations", func(t *testing.T) {
-		metaData := []byte("meta")
-		name := "backups/test.manifest"
+		metaData := []byte("{\"version\":\"1.0\"}")
+		name := "manifests/v1.json"
 		err := s.PutMetadata(ctx, name, metaData)
 		assert.NoError(t, err)
 
@@ -83,7 +87,7 @@ func TestFTPStorage_Integration(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, metaData, got)
 
-		files, err := s.ListMetadata(ctx, "backups/")
+		files, err := s.ListMetadata(ctx, "manifests/")
 		assert.NoError(t, err)
 		assert.Contains(t, files, name)
 	})
@@ -96,7 +100,7 @@ func TestFTPStorage_Integration(t *testing.T) {
 		err = s.Delete(ctx, name)
 		assert.NoError(t, err)
 
-		_, err = s.Open(ctx, name)
+		_, err = s.client.StatObject(ctx, s.bucketName, s.getObjectName(name), minio.StatObjectOptions{})
 		assert.Error(t, err)
 	})
 }
