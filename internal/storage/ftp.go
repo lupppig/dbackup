@@ -50,6 +50,9 @@ func NewFTPStorage(u *url.URL, opts StorageOptions) (*FTPStorage, error) {
 
 func (s *FTPStorage) Save(ctx context.Context, name string, r io.Reader) (string, error) {
 	path := filepath.Join(s.remotePath, name)
+	if err := s.ensureDir(filepath.Dir(path)); err != nil {
+		return "", err
+	}
 	err := s.client.Stor(path, r)
 	if err != nil {
 		return "", err
@@ -59,6 +62,15 @@ func (s *FTPStorage) Save(ctx context.Context, name string, r io.Reader) (string
 
 func (s *FTPStorage) Open(ctx context.Context, name string) (io.ReadCloser, error) {
 	return s.client.Retr(filepath.Join(s.remotePath, name))
+}
+
+func (s *FTPStorage) Exists(ctx context.Context, name string) (bool, error) {
+	target := filepath.Join(s.remotePath, name)
+	_, err := s.client.FileSize(target)
+	if err == nil {
+		return true, nil
+	}
+	return false, nil
 }
 
 func (s *FTPStorage) Delete(ctx context.Context, name string) error {
@@ -71,6 +83,9 @@ func (s *FTPStorage) Location() string {
 
 func (s *FTPStorage) PutMetadata(ctx context.Context, name string, data []byte) error {
 	path := filepath.Join(s.remotePath, name)
+	if err := s.ensureDir(filepath.Dir(path)); err != nil {
+		return err
+	}
 	return s.client.Stor(path, bytes.NewReader(data))
 }
 
@@ -119,6 +134,22 @@ func (s *FTPStorage) ListMetadata(ctx context.Context, prefix string) ([]string,
 		}
 	}
 	return files, nil
+}
+
+func (s *FTPStorage) ensureDir(path string) error {
+	if path == "." || path == "/" {
+		return nil
+	}
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	current := ""
+	if strings.HasPrefix(path, "/") {
+		current = "/"
+	}
+	for _, part := range parts {
+		current = filepath.Join(current, part)
+		_ = s.client.MakeDir(current) // Ignore error if it already exists
+	}
+	return nil
 }
 
 func (s *FTPStorage) Close() error {

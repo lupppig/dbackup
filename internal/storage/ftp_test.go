@@ -30,7 +30,6 @@ func TestFTPStorage_Integration(t *testing.T) {
 				"FTP_USER_NAME": username,
 				"FTP_USER_PASS": password,
 				"FTP_USER_HOME": "/home/testuser",
-				"PUBLICHOST":    "localhost",
 			},
 			ExposedPorts: []string{"21/tcp", "30000-30009/tcp"},
 			WaitingFor:   wait.ForLog("Starting Pure-FTPd"),
@@ -40,16 +39,12 @@ func TestFTPStorage_Integration(t *testing.T) {
 	require.NoError(t, err)
 	defer container.Terminate(ctx)
 
-	host, err := container.Host(ctx)
-	require.NoError(t, err)
-	if host == "localhost" || host == "::1" {
-		host = "127.0.0.1"
-	}
-
-	port, err := container.MappedPort(ctx, "21")
+	host, err := container.ContainerIP(ctx)
 	require.NoError(t, err)
 
-	uri := fmt.Sprintf("ftp://%s:%s@%s:%d/", username, password, host, port.Int())
+	port := 21
+
+	uri := fmt.Sprintf("ftp://%s:%s@%s:%d/", username, password, host, port)
 	u, err := url.Parse(uri)
 	require.NoError(t, err)
 

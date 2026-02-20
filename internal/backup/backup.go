@@ -233,10 +233,19 @@ func (m *BackupManager) Run(ctx context.Context, adapter database.DBAdapter, con
 
 	manBytes, err := man.Serialize()
 	if err == nil {
-		_ = m.storage.PutMetadata(ctx, finalName+".manifest", manBytes)
-		_ = m.storage.PutMetadata(ctx, "latest.manifest", manBytes)
-		if m.Options.Logger != nil {
+		if err := m.storage.PutMetadata(ctx, finalName+".manifest", manBytes); err != nil {
+			if m.Options.Logger != nil {
+				m.Options.Logger.Warn("Failed to save manifest", "error", err, "file", finalName+".manifest")
+			}
+		} else if m.Options.Logger != nil {
 			m.Options.Logger.Info("Manifest saved", "file", finalName+".manifest")
+		}
+
+		if err := m.storage.PutMetadata(ctx, "latest.manifest", manBytes); err != nil {
+			if m.Options.Logger != nil {
+				m.Options.Logger.Warn("Failed to update latest manifest", "error", err, "file", "latest.manifest")
+			}
+		} else if m.Options.Logger != nil {
 			m.Options.Logger.Info("Latest manifest updated", "file", "latest.manifest")
 		}
 	}
@@ -247,6 +256,7 @@ func (m *BackupManager) Run(ctx context.Context, adapter database.DBAdapter, con
 		Keep:      m.Options.Keep,
 		DBType:    conn.DBType,
 		DBName:    conn.DBName,
+		Logger:    m.Options.Logger,
 	})
 	if pruneErr := pm.Prune(ctx); pruneErr != nil {
 		if m.Options.Logger != nil {

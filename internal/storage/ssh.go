@@ -140,6 +140,21 @@ func (s *SSHStorage) Open(ctx context.Context, name string) (io.ReadCloser, erro
 	return f, nil
 }
 
+func (s *SSHStorage) Exists(ctx context.Context, name string) (bool, error) {
+	if err := s.connect(); err != nil {
+		return false, err
+	}
+	target := filepath.Join(s.remotePath, name)
+	_, err := s.sftpClient.Stat(target)
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err
+}
+
 func (s *SSHStorage) Delete(ctx context.Context, name string) error {
 	if err := s.connect(); err != nil {
 		return err

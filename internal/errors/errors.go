@@ -1,6 +1,7 @@
 package apperrors
 
 import (
+	"errors"
 	"fmt"
 )
 
@@ -55,6 +56,13 @@ func Wrap(err error, t ErrorType, msg string, hint string) *AppError {
 	}
 }
 
-var (
-	ErrIntegrityMismatch = New(TypeIntegrity, "Integrity failure", "The backup file may be corrupt or tampered with. Verify the source integrity.")
-)
+var ErrIntegrityMismatch = New(TypeIntegrity, "Integrity failure", "The backup file may be corrupt or tampered with. Verify the source integrity.")
+
+// IsType checks if an error or any error it wraps is of the given ErrorType
+func IsType(err error, t ErrorType) bool {
+	var appErr *AppError
+	if errors.As(err, &appErr) {
+		return appErr.Type == t
+	}
+	return false
+}

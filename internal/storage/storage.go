@@ -117,8 +117,10 @@ func Scrub(uriStr string) string {
 type Storage interface {
 	Save(ctx context.Context, name string, r io.Reader) (string, error)
 	Open(ctx context.Context, name string) (io.ReadCloser, error)
+	Exists(ctx context.Context, name string) (bool, error)
 	Delete(ctx context.Context, name string) error
 	Location() string
+	Close() error
 
 	// Metadata support
 	PutMetadata(ctx context.Context, name string, data []byte) error

@@ -90,7 +90,9 @@ func (sq *SqliteAdapter) RunRestore(ctx context.Context, conn ConnectionParams, 
 	if err != nil {
 		return err
 	}
-	sq.Logger.Info("restoring sqlite database...", "path", path)
+	if sq.Logger != nil {
+		sq.Logger.Info("restoring sqlite database...", "path", path)
+	}
 	return sq.runFullRestore(ctx, path, r)
 }
 

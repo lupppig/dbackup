@@ -153,6 +153,7 @@ and streams it directly into the database engine.`,
 							ClientCert: tlsClientCert,
 							ClientKey:  tlsClientKey,
 						},
+						IsPhysical: mysqlPhysical,
 					}
 
 					if err := doRestore(cmd, subL, connParams, mName, notifier); err != nil {
@@ -197,6 +198,7 @@ and streams it directly into the database engine.`,
 					ClientCert: tlsClientCert,
 					ClientKey:  tlsClientKey,
 				},
+				IsPhysical: mysqlPhysical,
 			}
 			return doRestore(cmd, l, connParams, fileName, notifier)
 		}
@@ -247,6 +249,7 @@ and streams it directly into the database engine.`,
 						ClientCert: tlsClientCert,
 						ClientKey:  tlsClientKey,
 					},
+					IsPhysical: mysqlPhysical,
 				}
 
 				if mURI == "" && dbURI != "" {
@@ -374,4 +377,5 @@ func init() {
 	restoreCmd.Flags().StringVarP(&from, "from", "f", "", "unified source URI for restore (alias for --to)")
 	restoreCmd.Flags().BoolVarP(&restoreAuto, "auto", "a", false, "automatically restore latest backups (default if no manifest is specified)")
 	restoreCmd.Flags().BoolVar(&restoreDryRun, "dry-run", false, "simulation mode (don't actually run restore)")
+	restoreCmd.Flags().BoolVar(&mysqlPhysical, "mysql-physical", false, "use physical backup mode for MySQL restores")
 }

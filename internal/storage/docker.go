@@ -61,6 +61,16 @@ func (s *DockerStorage) Open(ctx context.Context, name string) (io.ReadCloser, e
 	return pr, nil
 }
 
+func (s *DockerStorage) Exists(ctx context.Context, name string) (bool, error) {
+	target := filepath.Join(s.remotePath, name)
+	args := []string{"exec", s.containerName, "stat", target}
+	cmd := exec.CommandContext(ctx, "docker", args...)
+	if err := cmd.Run(); err != nil {
+		return false, nil
+	}
+	return true, nil
+}
+
 func (s *DockerStorage) Delete(ctx context.Context, name string) error {
 	path := filepath.Join(s.remotePath, name)
 	cmd := exec.CommandContext(ctx, "docker", "exec", s.containerName, "rm", path)
@@ -124,6 +134,10 @@ func (s *DockerStorage) ListMetadata(ctx context.Context, prefix string) ([]stri
 		}
 	}
 	return files, nil
+}
+
+func (s *DockerStorage) Close() error {
+	return nil
 }
 
 // Runner implementation

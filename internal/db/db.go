@@ -29,7 +29,8 @@ type ConnectionParams struct {
 	Port     int
 	DBUri    string
 
-	TLS TLSConfig
+	TLS        TLSConfig
+	IsPhysical bool
 }
 
 func (c *ConnectionParams) ParseURI() error {

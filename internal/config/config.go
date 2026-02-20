@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
@@ -66,7 +67,10 @@ type TLSConfig struct {
 	ClientKey  string `mapstructure:"client_key"`
 }
 
-var globalConfig *Config
+var (
+	globalConfig *Config
+	configMutex  sync.RWMutex
+)
 
 func Initialize(configPath string) error {
 	v := viper.New()
@@ -98,19 +102,30 @@ func Initialize(configPath string) error {
 		}
 	}
 
-	if err := v.Unmarshal(&globalConfig); err != nil {
+	var cfg Config
+	if err := v.Unmarshal(&cfg); err != nil {
 		return fmt.Errorf("failed to unmarshal config: %w", err)
 	}
+	configMutex.Lock()
+	globalConfig = &cfg
+	configMutex.Unlock()
 
 	v.WatchConfig()
 	v.OnConfigChange(func(e fsnotify.Event) {
-		_ = v.Unmarshal(&globalConfig)
+		var newCfg Config
+		if err := v.Unmarshal(&newCfg); err == nil {
+			configMutex.Lock()
+			globalConfig = &newCfg
+			configMutex.Unlock()
+		}
 	})
 
 	return nil
 }
 
 func GetConfig() *Config {
+	configMutex.RLock()
+	defer configMutex.RUnlock()
 	if globalConfig == nil {
 		return &Config{Parallelism: 4}
 	}

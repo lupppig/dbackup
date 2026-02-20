@@ -43,10 +43,9 @@ func (s *DedupeStorage) Save(ctx context.Context, name string, r io.Reader) (str
 		s.lastChunks = append(s.lastChunks, hashStr)
 
 		chunkPath := "chunks/" + hashStr
-		chk, err := s.inner.Open(ctx, chunkPath)
-		if err == nil {
+		exists, err := s.inner.Exists(ctx, chunkPath)
+		if err == nil && exists {
 			// Exists, skip
-			chk.Close()
 		} else {
 			// Assume it doesn't exist, save it
 			_, err = s.inner.Save(ctx, chunkPath, bytes.NewReader(data))
@@ -99,9 +98,69 @@ func (s *DedupeStorage) Open(ctx context.Context, name string) (io.ReadCloser, e
 }
 
 func (s *DedupeStorage) Delete(ctx context.Context, name string) error {
-	// Try deleting manifest and chunks?
-	// For now just delete the manifest/name.
-	return s.inner.Delete(ctx, name)
+	// If it's a regular file (not a manifest), just pass it down.
+	// In a dedupe layout, the base backup file doesn't actually exist, but we might pass it.
+	if !strings.HasSuffix(name, ".manifest") {
+		return s.inner.Delete(ctx, name)
+	}
+
+	// 1. Read the manifest we are about to delete to get its chunks
+	data, err := s.GetMetadata(ctx, name)
+	if err != nil {
+		return s.inner.Delete(ctx, name) // just delete it if metadata is missing
+	}
+
+	man, err := manifest.Deserialize(data)
+	if err != nil || man == nil {
+		return s.inner.Delete(ctx, name)
+	}
+
+	// 2. Identify candidate chunks to delete
+	candidates := make(map[string]bool)
+	for _, c := range man.Chunks {
+		candidates[c] = true
+	}
+
+	// 3. Delete the manifest itself
+	if err := s.inner.Delete(ctx, name); err != nil {
+		return err
+	}
+
+	// 4. Read all remaining manifests to find referenced chunks
+	files, err := s.ListMetadata(ctx, "")
+	if err != nil {
+		return nil // gracefully skip GC if list fails
+	}
+
+	for _, f := range files {
+		if !strings.HasSuffix(f, ".manifest") || f == name || f == "latest.manifest" {
+			continue
+		}
+		fdata, ferr := s.GetMetadata(ctx, f)
+		if ferr != nil {
+			continue
+		}
+		fman, ferr := manifest.Deserialize(fdata)
+		if ferr != nil || fman == nil {
+			continue
+		}
+		for _, c := range fman.Chunks {
+			if candidates[c] {
+				delete(candidates, c) // chunk is still in use, remove from deletion candidates
+			}
+		}
+	}
+
+	// 5. Delete orphaned chunks
+	for c := range candidates {
+		_ = s.inner.Delete(ctx, "chunks/"+c)
+	}
+
+	return nil
+}
+
+func (s *DedupeStorage) Exists(ctx context.Context, name string) (bool, error) {
+	return s.inner.Exists(ctx, name)
 }
 
 func (s *DedupeStorage) Location() string {
@@ -131,6 +190,10 @@ func (s *DedupeStorage) ListMetadata(ctx context.Context, prefix string) ([]stri
 		filtered = append(filtered, f)
 	}
 	return filtered, nil
+}
+
+func (s *DedupeStorage) Close() error {
+	return s.inner.Close()
 }
 
 type multiReadCloser struct {

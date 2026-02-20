@@ -108,7 +108,7 @@ func (s *SlackNotifier) Notify(ctx context.Context, stats Stats) error {
 func formatSize(b int64) string {
 	const unit = 1024
 	if b < unit {
-		return fmt.Sprintf("% d B", b)
+		return fmt.Sprintf("%d B", b)
 	}
 	div, exp := int64(unit), 0
 	for n := b / unit; n >= unit; n /= unit {

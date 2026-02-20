@@ -25,6 +25,10 @@ func (m *MockStorage) Open(ctx context.Context, name string) (io.ReadCloser, err
 	return args.Get(0).(io.ReadCloser), args.Error(1)
 }
 
+func (m *MockStorage) Exists(ctx context.Context, name string) (bool, error) {
+	return true, nil
+}
+
 func (m *MockStorage) Delete(ctx context.Context, name string) error {
 	args := m.Called(ctx, name)
 	return args.Error(0)
@@ -47,6 +51,11 @@ func (m *MockStorage) GetMetadata(ctx context.Context, name string) ([]byte, err
 func (m *MockStorage) ListMetadata(ctx context.Context, prefix string) ([]string, error) {
 	args := m.Called(ctx, prefix)
 	return args.Get(0).([]string), args.Error(1)
+}
+
+func (m *MockStorage) Close() error {
+	args := m.Called()
+	return args.Error(0)
 }
 
 func TestPruneManager_Prune(t *testing.T) {

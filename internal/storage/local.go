@@ -51,6 +51,17 @@ func (s *LocalStorage) Open(ctx context.Context, name string) (io.ReadCloser, er
 	return os.Open(path)
 }
 
+func (s *LocalStorage) Exists(ctx context.Context, name string) (bool, error) {
+	_, err := os.Stat(filepath.Join(s.baseDir, name))
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err
+}
+
 func (s *LocalStorage) Delete(ctx context.Context, name string) error {
 	path := filepath.Join(s.baseDir, name)
 	return os.Remove(path)
@@ -120,4 +131,8 @@ func (s *LocalStorage) ListMetadata(ctx context.Context, prefix string) ([]strin
 	})
 
 	return files, err
+}
+
+func (s *LocalStorage) Close() error {
+	return nil
 }

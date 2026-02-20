@@ -15,6 +15,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var mysqlPhysical bool
+
 var backupCmd = &cobra.Command{
 	Use:   "backup",
 	Short: "Create a database backup",
@@ -83,6 +85,7 @@ process fails, dbackup exits with a non-zero status code.`,
 					ClientCert: tlsClientCert,
 					ClientKey:  tlsClientKey,
 				},
+				IsPhysical: mysqlPhysical,
 			}
 			return doBackup(cmd, l, connParams, notifier)
 		}
@@ -115,6 +118,7 @@ process fails, dbackup exits with a non-zero status code.`,
 						ClientCert: tlsClientCert,
 						ClientKey:  tlsClientKey,
 					},
+					IsPhysical: mysqlPhysical,
 				}
 				if err := doBackup(cmd, subL, connParams, notifier); err != nil {
 					subL.Error("Backup failed", "error", err)
@@ -226,6 +230,7 @@ func init() {
 	backupCmd.Flags().StringVar(&fileName, "name", "", "custom backup file name")
 	backupCmd.Flags().StringVar(&retention, "retention", "", "retention period (e.g. 7d, 24h)")
 	backupCmd.Flags().IntVar(&keep, "keep", 0, "number of backups to keep")
+	backupCmd.Flags().BoolVar(&mysqlPhysical, "mysql-physical", false, "use physical backup mode for MySQL (default false/logical)")
 }
 
 func parseRetention(s string) time.Duration {

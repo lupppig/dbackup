@@ -2,6 +2,9 @@ package backup
 
 import (
 	"io"
+	"os"
+
+	"github.com/mattn/go-isatty"
 
 	"github.com/vbauerster/mpb/v8"
 	"github.com/vbauerster/mpb/v8/decor"
@@ -53,7 +56,9 @@ func (bc *ByteCounter) Write(p []byte) (int, error) {
 }
 
 func NewProgressContainer() *mpb.Progress {
-	// Future enhancement: Add check for os.Stdout TTY status
+	if !isatty.IsTerminal(os.Stdout.Fd()) && !isatty.IsCygwinTerminal(os.Stdout.Fd()) {
+		return nil
+	}
 	return mpb.New(mpb.WithWidth(64))
 }
 

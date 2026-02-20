@@ -153,6 +153,18 @@ func (s *S3Storage) Open(ctx context.Context, name string) (io.ReadCloser, error
 	return s.client.GetObject(ctx, s.bucketName, objectName, minio.GetObjectOptions{})
 }
 
+func (s *S3Storage) Exists(ctx context.Context, name string) (bool, error) {
+	_, err := s.client.StatObject(ctx, s.bucketName, s.getObjectName(name), minio.StatObjectOptions{})
+	if err == nil {
+		return true, nil
+	}
+	errResponse := minio.ToErrorResponse(err)
+	if errResponse.Code == "NoSuchKey" {
+		return false, nil
+	}
+	return false, err
+}
+
 func (s *S3Storage) Delete(ctx context.Context, name string) error {
 	objectName := s.getObjectName(name)
 	return s.client.RemoveObject(ctx, s.bucketName, objectName, minio.RemoveObjectOptions{})
@@ -212,4 +224,8 @@ func (s *S3Storage) getObjectName(name string) string {
 		return name
 	}
 	return strings.TrimSuffix(s.prefix, "/") + "/" + strings.TrimPrefix(name, "/")
+}
+
+func (s *S3Storage) Close() error {
+	return nil
 }

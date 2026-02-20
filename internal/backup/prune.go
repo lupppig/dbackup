@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lupppig/dbackup/internal/logger"
 	"github.com/lupppig/dbackup/internal/manifest"
 	"github.com/lupppig/dbackup/internal/storage"
 )
@@ -21,6 +22,7 @@ type PruneOptions struct {
 	Keep      int
 	DBType    string
 	DBName    string
+	Logger    *logger.Logger
 }
 
 func NewPruneManager(s storage.Storage, opts PruneOptions) *PruneManager {
@@ -109,9 +111,14 @@ func (m *PruneManager) Prune(ctx context.Context) error {
 		backupName := strings.TrimSuffix(manifestName, ".manifest")
 
 		// Delete backup file
-		_ = m.storage.Delete(ctx, backupName)
+		if err := m.storage.Delete(ctx, backupName); err != nil && m.options.Logger != nil {
+			m.options.Logger.Warn("Failed to prune backup file", "error", err, "file", backupName)
+		}
+
 		// Delete manifest
-		_ = m.storage.Delete(ctx, manifestName)
+		if err := m.storage.Delete(ctx, manifestName); err != nil && m.options.Logger != nil {
+			m.options.Logger.Warn("Failed to prune manifest", "error", err, "file", manifestName)
+		}
 	}
 
 	return nil
