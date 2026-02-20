@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/lupppig/dbackup/internal/logger"
-	"github.com/lupppig/dbackup/internal/manifest"
 	storagepkg "github.com/lupppig/dbackup/internal/storage"
 	"github.com/spf13/cobra"
 )
@@ -27,13 +26,13 @@ Example: dbackup migrate --from ./local-backups --to s3://my-bucket/backups`,
 			return fmt.Errorf("--from and --to are required")
 		}
 
-		src, err := storagepkg.NewStorage(migrateFrom)
+		src, err := storagepkg.FromURI(migrateFrom, storagepkg.StorageOptions{})
 		if err != nil {
 			return fmt.Errorf("failed to open source storage: %w", err)
 		}
 		defer src.Close()
 
-		dst, err := storagepkg.NewStorage(migrateTo)
+		dst, err := storagepkg.FromURI(migrateTo, storagepkg.StorageOptions{})
 		if err != nil {
 			return fmt.Errorf("failed to open destination storage: %w", err)
 		}
@@ -64,12 +63,6 @@ Example: dbackup migrate --from ./local-backups --to s3://my-bucket/backups`,
 			data, err := src.GetMetadata(cmd.Context(), file)
 			if err != nil {
 				l.Warn("Failed to read manifest", "file", file, "error", err)
-				continue
-			}
-
-			man, err := manifest.Deserialize(data)
-			if err != nil {
-				l.Warn("Failed to deserialize manifest", "file", file, "error", err)
 				continue
 			}
 

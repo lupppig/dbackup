@@ -25,14 +25,13 @@ A high-performance, extensible database backup CLI with built-in **deduplication
 
 ## Features
 
-- **Multi-Database Support**: Native integration with PostgreSQL, MySQL/MariaDB, and SQLite.
-- **Content-Addressable Storage (Dedupe)**: Save massive amounts of space by only storing unique data chunks.
-- **Parallel Execution**: Automatically scale your backup window with concurrent operations.
+- **Multi-Database Support**: Native integration with PostgreSQL (Logical & Physical), MySQL/MariaDB (Logical & Physical), and SQLite (Online).
+- **Content-Addressable Storage (Dedupe)**: Save massive amounts of space with parallel chunk hashing.
+- **Parallel Execution**: Automatically scale your backup window with concurrent database operations and multi-threaded deduplication.
 - **Multi-Cloud Storage**: Support for Local, SFTP, S3 (MinIO/AWS), FTP, and Docker.
+- **Advanced Retention (GFS)**: Grandfather-Father-Son rotation (Daily, Weekly, Monthly, Yearly).
+- **Storage Migration**: Move your entire backup history between storage backends with a single command.
 - **Client-Side Encryption**: AES-256-GCM authenticated encryption for maximum security.
-- **Intelligent Scheduling**: Built-in cron-style and interval-based scheduling.
-- **Simulation Mode**: Dry-run restores to verify your strategy without destructive actions.
-- **Environment Doctor**: Instantly diagnose missing native binaries and permissions.
 
 ---
 
@@ -74,6 +73,17 @@ dbackup dump --config ~/.dbackup/backup.yaml
 dbackup restore mysql --name latest.manifest --to mysql://user:pass@localhost/db --confirm-restore
 
 dbackup restore --auto --confirm-restore
+```
+
+### Migration
+Move all backups from one backend to another:
+```bash
+dbackup migrate --from ./local-backups --to s3://bucket/archive --dedupe
+```
+
+### Advanced Retention (GFS)
+```bash
+dbackup backup pg --db app --keep-daily 7 --keep-weekly 4 --keep-monthly 12
 ```
 
 ---
