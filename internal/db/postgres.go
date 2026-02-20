@@ -123,8 +123,43 @@ func (pa *PostgresAdapter) BuildConnection(ctx context.Context, conn ConnectionP
 }
 
 func (pa *PostgresAdapter) RunBackup(ctx context.Context, conn ConnectionParams, runner Runner, w io.Writer) error {
+	if conn.IsPhysical {
+		return pa.runPhysicalBackup(ctx, conn, runner, w)
+	}
 	// Standard full logical backup
 	return pa.runLogicalBackup(ctx, conn, runner, w)
+}
+
+func (pa *PostgresAdapter) runPhysicalBackup(ctx context.Context, conn ConnectionParams, runner Runner, w io.Writer) error {
+	if pa.logger != nil {
+		pa.logger.Info("Starting physical backup (pg_basebackup)...", "engine", pa.Name())
+	}
+
+	dsn, err := pa.BuildConnection(ctx, conn)
+	if err != nil {
+		return err
+	}
+
+	// pg_basebackup flags:
+	// --dbname: connection string
+	// --format=tar: output as a tar archive
+	// --wal-method=fetch: include WALs in the backup
+	// --pgdata=-: stream to stdout
+	args := []string{
+		"--dbname", dsn,
+		"--format=tar",
+		"--wal-method=fetch",
+		"--pgdata=-",
+	}
+
+	if err := runner.Run(ctx, "pg_basebackup", args, w); err != nil {
+		if strings.Contains(err.Error(), "status 127") || strings.Contains(err.Error(), "executable file not found") {
+			return apperrors.New(apperrors.TypeDependency, "pg_basebackup not found", "Please install postgresql-client to enable physical backups.")
+		}
+		return apperrors.Wrap(err, apperrors.TypeInternal, "pg_basebackup failed", "Check pg_basebackup logs or permissions. Note that pg_basebackup requires a replication connection.")
+	}
+
+	return nil
 }
 
 func (pa *PostgresAdapter) runLogicalBackup(ctx context.Context, conn ConnectionParams, runner Runner, w io.Writer) error {
@@ -156,7 +191,17 @@ func (pa *PostgresAdapter) runLogicalBackup(ctx context.Context, conn Connection
 
 func (pa *PostgresAdapter) RunRestore(ctx context.Context, conn ConnectionParams, runner Runner, r io.Reader) error {
 	if ma := pa.logger; ma != nil {
-		ma.Info("Restoring database...", "engine", pa.Name())
+		ma.Info("Restoring database...", "engine", pa.Name(), "is_physical", conn.IsPhysical)
+	}
+
+	if conn.IsPhysical {
+		if pa.logger != nil {
+			pa.logger.Info("Physical restore detected. Postgres physical restores usually require stopping the database and extracting the tarball into the data directory. dbackup currently only automates the streaming extraction part.")
+		}
+		// For now, we just pipe it to 'tar' or just log that it's a manual process if we don't have a clear target dir.
+		// However, for consistency with MySQL, let's at least support streaming it to a dir if provided in the future.
+		// For now, we return an error or a note.
+		return fmt.Errorf("automated physical restore for Postgres is not yet fully implemented. Please manually extract the backup tarball to your PGDATA directory")
 	}
 
 	connStr, err := pa.BuildConnection(ctx, conn)

@@ -3,8 +3,11 @@ package db
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"time"
 
 	apperrors "github.com/lupppig/dbackup/internal/errors"
 	"github.com/lupppig/dbackup/internal/logger"
@@ -72,10 +75,41 @@ func (sq *SqliteAdapter) RunBackup(ctx context.Context, conn ConnectionParams, r
 
 func (sq *SqliteAdapter) runFullBackup(ctx context.Context, path string, runner Runner, w io.Writer) error {
 	if _, ok := runner.(*LocalRunner); !ok && runner != nil {
+		// Remote backup or custom runner: cat is usually enough if we don't care about locks,
+		// but for consistency with "Online Backup", we should try to use sqlite3 CLI if available.
+		// For now cat is used as a fallback.
 		return runner.Run(ctx, "cat", []string{path}, w)
 	}
 
-	srcFile, err := os.Open(path)
+	// Online Backup using VACUUM INTO
+	// 1. Create a temporary file
+	tempFile := filepath.Join(os.TempDir(), fmt.Sprintf("dbackup_%d.sqlite", time.Now().UnixNano()))
+	defer os.Remove(tempFile)
+
+	db, err := sql.Open("sqlite3", path)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	// 2. Perform VACUUM INTO
+	_, err = db.ExecContext(ctx, fmt.Sprintf("VACUUM INTO '%s'", tempFile))
+	if err != nil {
+		// Fallback to direct file copy if VACUUM INTO fails (e.g. old sqlite version or permission)
+		if sq.Logger != nil {
+			sq.Logger.Warn("VACUUM INTO failed, falling back to direct copy", "error", err)
+		}
+		srcFile, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer srcFile.Close()
+		_, err = io.Copy(w, srcFile)
+		return err
+	}
+
+	// 3. Stream the temporary file to the writer
+	srcFile, err := os.Open(tempFile)
 	if err != nil {
 		return err
 	}

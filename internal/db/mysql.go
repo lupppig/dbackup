@@ -284,29 +284,50 @@ func (ma *MysqlAdapter) RunRestore(ctx context.Context, conn ConnectionParams, r
 }
 
 func (ma *MysqlAdapter) runPhysicalRestore(ctx context.Context, conn ConnectionParams, runner Runner, r io.Reader) error {
+	stagingDir := "./restore_staging"
 	if ma.logger != nil {
-		ma.logger.Info("Executing physical restore via xbstream. Extracting to ./restore_staging...")
+		ma.logger.Info("Executing physical restore phase 1: Extraction", "staging_dir", stagingDir)
 	}
 
-	// Create staging directory
-	// In a real app this would be configurable, using local runner wrapper for mkdir
-	// We just pass it to xbstream to create or assume it creates it.
-	// Actually xbstream -C requires the dir to exist or it creates it? xbstream needs the dir to exist.
-	// For simplicity, we just use -C . to extract in current directory inside a folder if it's there.
-	args := []string{
-		"-x",
-		"-C", ".",
-	}
-
-	if err := runner.RunWithIO(ctx, "xbstream", args, r, nil); err != nil {
-		if strings.Contains(err.Error(), "status 127") || strings.Contains(err.Error(), "executable file not found") {
-			return apperrors.New(apperrors.TypeDependency, "xbstream not found", "Please install xtrabackup/xbstream to enable physical restores.")
+	// 1. Extract xbstream
+	// Ensure staging dir exists
+	if _, ok := runner.(*LocalRunner); ok {
+		if err := os.MkdirAll(stagingDir, 0755); err != nil {
+			return apperrors.Wrap(err, apperrors.TypeResource, "failed to create staging directory", "Check permissions for ./restore_staging")
 		}
-		return apperrors.Wrap(err, apperrors.TypeInternal, "xbstream physical restore failed", "Check xbstream logs.")
+	}
+
+	extractArgs := []string{"-x", "-C", stagingDir}
+	if err := runner.RunWithIO(ctx, "xbstream", extractArgs, r, nil); err != nil {
+		if strings.Contains(err.Error(), "status 127") || strings.Contains(err.Error(), "executable file not found") {
+			return apperrors.New(apperrors.TypeDependency, "xbstream not found", "Please install xtrabackup/xbstream on the target to enable physical restores.")
+		}
+		return apperrors.Wrap(err, apperrors.TypeInternal, "xbstream extraction failed", "Check xbstream logs or backup integrity.")
+	}
+
+	// 2. Prepare the backup
+	if ma.logger != nil {
+		ma.logger.Info("Executing physical restore phase 2: Prepare", "staging_dir", stagingDir)
+	}
+	prepareArgs := []string{"--prepare", fmt.Sprintf("--target-dir=%s", stagingDir)}
+	if err := runner.Run(ctx, "xtrabackup", prepareArgs, io.Discard); err != nil {
+		return apperrors.Wrap(err, apperrors.TypeInternal, "xtrabackup --prepare failed", "The backup data might be inconsistent or corrupted.")
+	}
+
+	// 3. Copy-back to data directory
+	if ma.logger != nil {
+		ma.logger.Info("Executing physical restore phase 3: Copy-back", "staging_dir", stagingDir)
+		ma.logger.Warn("Copy-back will attempt to restore files to the MySQL data directory. This usually requires the MySQL service to be STOPPED and the data directory to be EMPTY.")
+	}
+
+	copyBackArgs := []string{"--copy-back", fmt.Sprintf("--target-dir=%s", stagingDir)}
+	if err := runner.Run(ctx, "xtrabackup", copyBackArgs, io.Discard); err != nil {
+		return apperrors.Wrap(err, apperrors.TypeInternal, "xtrabackup --copy-back failed", "Ensure the MySQL data directory is empty and you have write permissions.")
 	}
 
 	if ma.logger != nil {
-		ma.logger.Info("Physical extraction complete. Proceed with manual xtrabackup --prepare and --copy-back on the staging directory.")
+		ma.logger.Info("Physical restore complete. Remember to fix permissions (chown -R mysql:mysql) and restart the MySQL service.")
 	}
+
 	return nil
 }
