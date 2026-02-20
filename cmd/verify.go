@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/lupppig/dbackup/internal/logger"
 	"github.com/lupppig/dbackup/internal/storage"
 	"github.com/spf13/cobra"
 )
@@ -23,21 +24,22 @@ var verifyCmd = &cobra.Command{
 		defer s.Close()
 
 		ds, ok := s.(*storage.DedupeStorage)
+		l := logger.FromContext(cmd.Context())
 		if !ok {
-			fmt.Println("Verify is currently only supported for deduplicated storage targets.")
+			l.Info("Verify is currently only supported for deduplicated storage targets.")
 			return nil
 		}
 
-		fmt.Printf("Verifying integrity for %s...\n", target)
+		l.Info("Verifying integrity...", "target", target)
 		missing, err := ds.Verify(context.Background())
 		if err != nil {
 			return fmt.Errorf("verify failed: %w", err)
 		}
 
 		if len(missing) == 0 {
-			fmt.Println("✅ Integrity check passed. All chunks are present.")
+			l.Info("Integrity check passed. All chunks are present.")
 		} else {
-			fmt.Printf("❌ Integrity check failed! %d missing chunks detected:\n", len(missing))
+			l.Error("Integrity check failed!", "missing_chunks", len(missing))
 			for i, c := range missing {
 				fmt.Printf("  - %s\n", c)
 				if i >= 9 {

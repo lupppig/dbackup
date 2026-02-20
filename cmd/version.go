@@ -1,9 +1,9 @@
 package cmd
 
 import (
-	"fmt"
 	"runtime"
 
+	"github.com/lupppig/dbackup/internal/logger"
 	"github.com/spf13/cobra"
 )
 
@@ -17,10 +17,15 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print the dbackup version",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("dbackup version %s\n", Version)
-		fmt.Printf("commit: %s\n", Commit)
-		fmt.Printf("built at: %s\n", BuildDate)
-		fmt.Printf("go version: %s %s/%s\n", runtime.Version(), runtime.GOOS, runtime.GOARCH)
+		l := logger.FromContext(cmd.Context())
+		l.Info("dbackup",
+			"version", Version,
+			"commit", Commit,
+			"built_at", BuildDate,
+			"go_version", runtime.Version(),
+			"os", runtime.GOOS,
+			"arch", runtime.GOARCH,
+		)
 	},
 }
 

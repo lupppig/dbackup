@@ -31,10 +31,7 @@ and streams it directly into the database engine.`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		l := logger.New(logger.Config{
-			JSON:    LogJSON,
-			NoColor: NoColor,
-		})
+		l := logger.FromContext(cmd.Context())
 
 		if from != "" {
 			target = from

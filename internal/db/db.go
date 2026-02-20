@@ -94,13 +94,22 @@ type Runner interface {
 	RunWithIO(ctx context.Context, name string, args []string, r io.Reader, w io.Writer) error
 }
 
-type LocalRunner struct{}
+type LocalRunner struct {
+	logger *logger.Logger
+}
+
+func NewLocalRunner(l *logger.Logger) *LocalRunner {
+	return &LocalRunner{logger: l}
+}
 
 func (r *LocalRunner) Run(ctx context.Context, name string, args []string, w io.Writer) error {
 	return r.RunWithIO(ctx, name, args, nil, w)
 }
 
 func (r *LocalRunner) RunWithIO(ctx context.Context, name string, args []string, stdin io.Reader, stdout io.Writer) error {
+	if r.logger != nil {
+		r.logger.Debug("Executing command", "command", name, "args", strings.Join(args, " "))
+	}
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Stdout = stdout
 	cmd.Stdin = stdin

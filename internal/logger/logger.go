@@ -8,6 +8,10 @@ import (
 	"os"
 )
 
+type contextKey struct{}
+
+var loggerKey = contextKey{}
+
 const (
 	colorReset  = "\033[0m"
 	colorRed    = "\033[31m"
@@ -80,6 +84,11 @@ func (l *Logger) Debug(msg string, args ...any) {
 	l.inner.Debug(msg, args...)
 }
 
+func (l *Logger) Fatal(msg string, args ...any) {
+	l.inner.Error(msg, args...)
+	os.Exit(1)
+}
+
 func (l *Logger) With(args ...any) *Logger {
 	return &Logger{
 		inner: l.inner.With(args...),
@@ -130,4 +139,16 @@ func (h *colorHandler) Handle(ctx context.Context, r slog.Record) error {
 	)
 
 	return nil
+}
+
+func FromContext(ctx context.Context) *Logger {
+	if l, ok := ctx.Value(loggerKey).(*Logger); ok {
+		return l
+	}
+	// Fallback to a default logger if none in context
+	return New(Config{})
+}
+
+func WithContext(ctx context.Context, l *Logger) context.Context {
+	return context.WithValue(ctx, loggerKey, l)
 }

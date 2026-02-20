@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/lupppig/dbackup/internal/config"
+	"github.com/lupppig/dbackup/internal/logger"
 	"github.com/spf13/cobra"
 )
 
@@ -27,6 +28,12 @@ var rootCmd = &cobra.Command{
 		if err := config.Initialize(configFile); err != nil {
 			return err
 		}
+
+		l := logger.New(logger.Config{
+			JSON:    LogJSON,
+			NoColor: NoColor,
+		})
+		cmd.SetContext(logger.WithContext(cmd.Context(), l))
 		return nil
 	},
 	SilenceUsage:  true,

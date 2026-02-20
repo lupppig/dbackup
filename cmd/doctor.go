@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"runtime"
 
+	"github.com/lupppig/dbackup/internal/logger"
 	"github.com/spf13/cobra"
 )
 
@@ -13,8 +14,8 @@ var doctorCmd = &cobra.Command{
 	Short: "Check if required native binaries are installed",
 	Long:  `Verify that all native tools required for backup and restore operations are present in your system PATH.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("dbackup doctor - System Environment Check\n")
-		fmt.Printf("OS: %s, Architecture: %s\n\n", runtime.GOOS, runtime.GOARCH)
+		l := logger.FromContext(cmd.Context())
+		l.Info("dbackup doctor - System Environment Check", "os", runtime.GOOS, "arch", runtime.GOARCH)
 
 		groups := []struct {
 			name     string

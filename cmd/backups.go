@@ -16,10 +16,6 @@ var backupsCmd = &cobra.Command{
 	Long: `List all available backups in the specified storage.
 You can filter by engine and database name.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		l := logger.New(logger.Config{
-			JSON:    LogJSON,
-			NoColor: NoColor,
-		})
 
 		if from != "" {
 			target = from
@@ -38,6 +34,7 @@ You can filter by engine and database name.`,
 			s = storage.NewDedupeStorage(s)
 		}
 
+		l := logger.FromContext(cmd.Context())
 		l.Info("Scanning storage for backups...", "location", target)
 
 		files, err := s.ListMetadata(cmd.Context(), "")
@@ -90,9 +87,9 @@ You can filter by engine and database name.`,
 		}
 
 		if count == 0 {
-			fmt.Println("No backups found.")
+			l.Info("No backups found.")
 		} else {
-			fmt.Printf("\nTotal backups found: %d\n", count)
+			l.Info("Backups listed", "count", count)
 		}
 
 		return nil
