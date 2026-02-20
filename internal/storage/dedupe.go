@@ -9,7 +9,9 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/lupppig/dbackup/internal/manifest"
 )
@@ -31,45 +33,153 @@ func (s *DedupeStorage) Save(ctx context.Context, name string, r io.Reader) (str
 	chunker := NewChunker(r)
 	s.lastChunks = nil
 
-	const stripeSize = 10 // Every 10 chunks, we generate a parity chunk
+	const stripeSize = 10
 	var stripe [][]byte
 
-	for {
-		data, err := chunker.Next()
-		if err != nil {
-			if err == io.EOF {
+	type chunkResult struct {
+		id   int
+		data []byte
+		hash string
+		err  error
+	}
+
+	numWorkers := runtime.NumCPU()
+	if numWorkers < 2 {
+		numWorkers = 2
+	}
+
+	type chunkJob struct {
+		id   int
+		data []byte
+	}
+
+	jobs := make(chan chunkJob, numWorkers*2)
+	results := make(chan chunkResult, numWorkers*2)
+	resultMap := make(map[int]chunkResult)
+	nextID := 0
+	processID := 0
+	feederDone := make(chan bool)
+
+	var wg sync.WaitGroup
+	var workerErr error
+	var errOnce sync.Once
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// Start workers
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for job := range jobs {
+				hash := sha256.Sum256(job.data)
+				hashStr := hex.EncodeToString(hash[:])
+
+				// Check and Save if not exists
+				chunkPath := "chunks/" + hashStr
+				exists, err := s.inner.Exists(ctx, chunkPath)
+				if err == nil && !exists {
+					_, err = s.inner.Save(ctx, chunkPath, bytes.NewReader(job.data))
+				}
+
+				select {
+				case results <- chunkResult{id: job.id, data: job.data, hash: hashStr, err: err}:
+				case <-ctx.Done():
+					return
+				}
+
+				if err != nil {
+					errOnce.Do(func() {
+						workerErr = err
+						cancel()
+					})
+					return
+				}
+			}
+		}()
+	}
+
+	// Result collector and feeder
+	go func() {
+		defer close(jobs)
+		defer close(feederDone)
+		for {
+			data, err := chunker.Next()
+			if err != nil {
+				if err != io.EOF {
+					errOnce.Do(func() {
+						workerErr = err
+						cancel()
+					})
+				}
 				break
 			}
-			return "", err
-		}
 
-		hash := sha256.Sum256(data)
-		hashStr := hex.EncodeToString(hash[:])
-		s.lastChunks = append(s.lastChunks, hashStr)
-
-		chunkPath := "chunks/" + hashStr
-		exists, err := s.inner.Exists(ctx, chunkPath)
-		if err == nil && exists {
-			// Exists, skip
-		} else {
-			// Assume it doesn't exist, save it
-			_, err = s.inner.Save(ctx, chunkPath, bytes.NewReader(data))
-			if err != nil {
-				return "", fmt.Errorf("failed to save chunk %s: %w", hashStr, err)
+			select {
+			case jobs <- chunkJob{id: nextID, data: data}:
+				nextID++
+			case <-ctx.Done():
+				return
 			}
 		}
+	}()
 
-		// Keep track of data for parity
-		stripe = append(stripe, data)
-		if len(stripe) == stripeSize {
-			if err := s.saveParity(ctx, stripe); err != nil {
-				// Don't fail the whole backup for parity failure, but log it if we had a logger here
+	// Process results in order
+	for {
+		var res chunkResult
+		select {
+		case res = <-results:
+			resultMap[res.id] = res
+		case <-feederDone:
+			if processID == nextID {
+				goto final
 			}
-			stripe = nil
+		case <-ctx.Done():
+			if workerErr != nil {
+				return "", workerErr
+			}
+			return "", ctx.Err()
+		}
+
+		for {
+			res, ok := resultMap[processID]
+			if !ok {
+				break
+			}
+			delete(resultMap, processID)
+
+			if res.err != nil {
+				return "", res.err
+			}
+
+			s.lastChunks = append(s.lastChunks, res.hash)
+			stripe = append(stripe, res.data)
+			if len(stripe) == stripeSize {
+				if err := s.saveParity(ctx, stripe); err != nil {
+					// Log parity error
+				}
+				stripe = nil
+			}
+			processID++
+		}
+
+		// Re-check termination after inner loop
+		select {
+		case <-feederDone:
+			if processID == nextID {
+				goto final
+			}
+		default:
 		}
 	}
 
-	// Save final incomplete stripe parity
+final:
+	wg.Wait()
+	if workerErr != nil {
+		return "", workerErr
+	}
+
 	if len(stripe) > 0 {
 		_ = s.saveParity(ctx, stripe)
 	}

@@ -252,11 +252,12 @@ func (m *BackupManager) Run(ctx context.Context, adapter database.DBAdapter, con
 
 	// Trigger pruning
 	pm := NewPruneManager(m.storage, PruneOptions{
-		Retention: m.Options.Retention,
-		Keep:      m.Options.Keep,
-		DBType:    conn.DBType,
-		DBName:    conn.DBName,
-		Logger:    m.Options.Logger,
+		Retention:       m.Options.Retention,
+		Keep:            m.Options.Keep,
+		RetentionPolicy: m.Options.RetentionPolicy,
+		DBType:          conn.DBType,
+		DBName:          conn.DBName,
+		Logger:          m.Options.Logger,
 	})
 	if pruneErr := pm.Prune(ctx); pruneErr != nil {
 		if m.Options.Logger != nil {

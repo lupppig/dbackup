@@ -21,8 +21,9 @@ type BackupOptions struct {
 	AllowInsecure bool // Allow insecure protocols
 	Dedupe        bool // Enable storage-level deduplication (incremental)
 
-	Retention time.Duration
-	Keep      int
+	Retention       time.Duration
+	Keep            int
+	RetentionPolicy RetentionPolicy
 
 	// Encryption
 	Encrypt              bool
@@ -39,4 +40,11 @@ type BackupOptions struct {
 
 type BackupProcess interface {
 	Run(ctx context.Context) error
+}
+
+type RetentionPolicy struct {
+	KeepDaily   int
+	KeepWeekly  int
+	KeepMonthly int
+	KeepYearly  int
 }

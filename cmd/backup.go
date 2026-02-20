@@ -16,6 +16,7 @@ import (
 )
 
 var mysqlPhysical bool
+var keepDaily, keepWeekly, keepMonthly, keepYearly int
 
 var backupCmd = &cobra.Command{
 	Use:   "backup",
@@ -163,8 +164,14 @@ func doBackup(cmd *cobra.Command, l *logger.Logger, connParams database.Connecti
 		EncryptionPassphrase: encryptionPassphrase,
 		Retention:            parseRetention(retention),
 		Keep:                 keep,
-		Logger:               l,
-		Notifier:             notifier,
+		RetentionPolicy: backup.RetentionPolicy{
+			KeepDaily:   keepDaily,
+			KeepWeekly:  keepWeekly,
+			KeepMonthly: keepMonthly,
+			KeepYearly:  keepYearly,
+		},
+		Logger:   l,
+		Notifier: notifier,
 	})
 	if err != nil {
 		return err
@@ -228,6 +235,10 @@ func init() {
 	backupCmd.Flags().StringVar(&retention, "retention", "", "retention period (e.g. 7d, 24h)")
 	backupCmd.Flags().IntVar(&keep, "keep", 0, "number of backups to keep")
 	backupCmd.Flags().BoolVar(&mysqlPhysical, "mysql-physical", false, "use physical backup mode for MySQL (default false/logical)")
+	backupCmd.Flags().IntVar(&keepDaily, "keep-daily", 0, "number of daily backups to keep")
+	backupCmd.Flags().IntVar(&keepWeekly, "keep-weekly", 0, "number of weekly backups to keep")
+	backupCmd.Flags().IntVar(&keepMonthly, "keep-monthly", 0, "number of monthly backups to keep")
+	backupCmd.Flags().IntVar(&keepYearly, "keep-yearly", 0, "number of yearly backups to keep")
 }
 
 func parseRetention(s string) time.Duration {
