@@ -11,6 +11,7 @@ require (
 	github.com/jlaffaye/ftp v0.2.0
 	github.com/klauspost/compress v1.18.2
 	github.com/lib/pq v1.10.9
+	github.com/mattn/go-isatty v0.0.20
 	github.com/mattn/go-sqlite3 v1.14.33
 	github.com/minio/minio-go/v7 v7.0.98
 	github.com/pierrec/lz4/v4 v4.1.25
@@ -61,7 +62,6 @@ require (
 	github.com/kr/fs v0.1.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
 	github.com/magiconair/properties v1.8.10 // indirect
-	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.19 // indirect
 	github.com/minio/crc64nvme v1.1.1 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
