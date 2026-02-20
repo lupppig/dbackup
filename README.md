@@ -32,6 +32,9 @@ A high-performance, extensible database backup CLI with built-in **deduplication
 - **Advanced Retention (GFS)**: Grandfather-Father-Son rotation (Daily, Weekly, Monthly, Yearly).
 - **Storage Migration**: Move your entire backup history between storage backends with a single command.
 - **Client-Side Encryption**: AES-256-GCM authenticated encryption for maximum security.
+- **Tamper-Evident Audit Log**: Optional cryptographic chaining for all storage operations.
+- **Key Rotation**: Securely re-encrypt your entire history with a new passphrase.
+- **Live Diagnostics**: Built-in latency and permission checks for all configured targets.
 
 ---
 
@@ -45,7 +48,11 @@ sudo mv dbackup /usr/local/bin/
 
 ### 2. Check Environment
 ```bash
+# Check local binaries
 dbackup doctor
+
+# Check live target connectivity & permissions
+dbackup doctor --config backup.yaml
 ```
 
 ---
@@ -86,6 +93,18 @@ dbackup migrate --from ./local-backups --to s3://bucket/archive --dedupe
 dbackup backup pg --db app --keep-daily 7 --keep-weekly 4 --keep-monthly 12
 ```
 
+### Key Rotation
+Rotate your encryption secrets without losing history:
+```bash
+dbackup rekey --old-pass secret1 --new-pass secret2 --target s3://bucket
+```
+
+### Audit Logging
+Enable tamper-evident logging for any command:
+```bash
+dbackup dump --audit
+```
+
 ---
 
 ## Configuration (`backup.yaml`)
@@ -112,6 +131,15 @@ restores:
     from: "s3://bucket/backups/latest.manifest"
     to: "postgres://user@localhost/verify"
     dry_run: true
+
+notifications:
+  slack:
+    webhook_url: "${SLACK_URL}"
+    template: "🚀 {{.Database}} backup finished in {{.FormattedDuration}}"
+  webhooks:
+    - id: "discord"
+      url: "https://discord.com/api/webhooks/..."
+      template: '{"content": "Backup of {{.Database}} [{{.Status}}]"}'
 ```
 
 ---
@@ -134,8 +162,10 @@ restores:
 ## Security & Reliability
 
 - **AES-256-GCM**: Industry-standard authenticated encryption for data at rest.
+- **Tamper-Evidence**: Audit logs are hash-chained (`audit.jsonl`), preventing undetected log manipulation.
+- **Key Rotation**: Dedicated `rekey` command allowing periodic security updates for long-term archives.
 - **Fast-Fail Connectivity**: S3 and SFTP operations include intelligent 15s timeouts to prevent infinite hangs.
-- **Zero-Leaking**: Passwords and keys are scrubbed from logs.
+- **Zero-Leaking**: Passwords and keys are scrubbed from logs and configuration dumps.
 - **Integrity**: Every backup is verified via SHA-256 manifest files.
 
 ---

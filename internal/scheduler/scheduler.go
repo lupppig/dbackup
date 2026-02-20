@@ -227,7 +227,7 @@ func (s *Scheduler) executeTask(id string) {
 
 	var notifier notify.Notifier
 	if os.Getenv("SLACK_WEBHOOK") != "" {
-		notifier = notify.NewSlackNotifier(os.Getenv("SLACK_WEBHOOK"))
+		notifier = notify.NewSlackNotifier(os.Getenv("SLACK_WEBHOOK"), "")
 	}
 
 	maxRetries := task.Options.Retries

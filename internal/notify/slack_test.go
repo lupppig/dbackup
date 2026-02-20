@@ -50,7 +50,7 @@ func TestSlackNotifier_Notify_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	notifier := NewSlackNotifier(server.URL)
+	notifier := NewSlackNotifier(server.URL, "")
 	stats := Stats{
 		Status:    StatusSuccess,
 		Operation: "Backup",
@@ -79,7 +79,7 @@ func TestSlackNotifier_Notify_Error(t *testing.T) {
 	}))
 	defer server.Close()
 
-	notifier := NewSlackNotifier(server.URL)
+	notifier := NewSlackNotifier(server.URL, "")
 	stats := Stats{
 		Status:    StatusError,
 		Operation: "Restore",
@@ -95,7 +95,7 @@ func TestSlackNotifier_Notify_Error(t *testing.T) {
 }
 
 func TestSlackNotifier_EmptyURL(t *testing.T) {
-	notifier := NewSlackNotifier("")
+	notifier := NewSlackNotifier("", "")
 	err := notifier.Notify(context.Background(), Stats{Operation: "Test"})
 	assert.NoError(t, err) // Should silently return nil if no URL
 }

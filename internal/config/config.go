@@ -24,11 +24,21 @@ type Config struct {
 }
 
 type Notifications struct {
-	Slack SlackConfig `mapstructure:"slack"`
+	Slack    SlackConfig     `mapstructure:"slack"`
+	Webhooks []WebhookConfig `mapstructure:"webhooks"`
 }
 
 type SlackConfig struct {
 	WebhookURL string `mapstructure:"webhook_url"`
+	Template   string `mapstructure:"template"` // Custom message template
+}
+
+type WebhookConfig struct {
+	ID       string            `mapstructure:"id"`
+	URL      string            `mapstructure:"url"`
+	Method   string            `mapstructure:"method"` // Default POST
+	Template string            `mapstructure:"template"`
+	Headers  map[string]string `mapstructure:"headers"`
 }
 
 type TaskConfig struct {

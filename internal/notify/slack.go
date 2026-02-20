@@ -6,15 +6,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"text/template"
 	"time"
 )
 
 type SlackNotifier struct {
 	WebhookURL string
+	Template   string
 }
 
-func NewSlackNotifier(url string) *SlackNotifier {
-	return &SlackNotifier{WebhookURL: url}
+func NewSlackNotifier(url, tmpl string) *SlackNotifier {
+	return &SlackNotifier{WebhookURL: url, Template: tmpl}
 }
 
 type slackAttachment struct {
@@ -77,13 +79,22 @@ func (s *SlackNotifier) Notify(ctx context.Context, stats Stats) error {
 		attachment.Text = fmt.Sprintf("*Error:* %v", stats.Error)
 	}
 
-	payload := slackPayload{
-		Attachments: []slackAttachment{attachment},
-	}
+	var body []byte
+	var err error
 
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return err
+	if s.Template != "" {
+		body, err = s.renderTemplate(stats)
+		if err != nil {
+			return fmt.Errorf("failed to render slack template: %w", err)
+		}
+	} else {
+		payload := slackPayload{
+			Attachments: []slackAttachment{attachment},
+		}
+		body, err = json.Marshal(payload)
+		if err != nil {
+			return err
+		}
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", s.WebhookURL, bytes.NewBuffer(body))
@@ -103,6 +114,28 @@ func (s *SlackNotifier) Notify(ctx context.Context, stats Stats) error {
 	}
 
 	return nil
+}
+
+func (s *SlackNotifier) renderTemplate(stats Stats) ([]byte, error) {
+	tmpl, err := template.New("slack").Parse(s.Template)
+	if err != nil {
+		return nil, err
+	}
+
+	var buf bytes.Buffer
+	data := struct {
+		Stats
+		FormattedDuration string
+	}{
+		Stats:             stats,
+		FormattedDuration: stats.Duration.Truncate(time.Second).String(),
+	}
+
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
 }
 
 func formatSize(b int64) string {

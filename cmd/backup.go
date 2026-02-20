@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/lupppig/dbackup/internal/backup"
+	"github.com/lupppig/dbackup/internal/config"
 	database "github.com/lupppig/dbackup/internal/db"
 	"github.com/lupppig/dbackup/internal/logger"
 	"github.com/lupppig/dbackup/internal/notify"
@@ -59,9 +60,18 @@ process fails, dbackup exits with a non-zero status code.`,
 			return fmt.Errorf("database engine is required (e.g. backup sqlite ...)")
 		}
 
-		var notifier notify.Notifier
+		var notifier notify.Notifier = notify.BuildNotifier(config.GetConfig())
 		if SlackWebhook != "" {
-			notifier = notify.NewSlackNotifier(SlackWebhook)
+			sn := notify.NewSlackNotifier(SlackWebhook, "")
+			if notifier != nil {
+				if mn, ok := notifier.(*notify.MultiNotifier); ok {
+					mn.Notifiers = append(mn.Notifiers, sn)
+				} else {
+					notifier = &notify.MultiNotifier{Notifiers: []notify.Notifier{notifier, sn}}
+				}
+			} else {
+				notifier = sn
+			}
 		}
 
 		if target == "" {

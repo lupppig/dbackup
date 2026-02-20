@@ -35,10 +35,7 @@ var dumpCmd = &cobra.Command{
 			JSON:    conf.LogJSON,
 			NoColor: conf.NoColor,
 		})
-		var notifier notify.Notifier
-		if conf.Notifications.Slack.WebhookURL != "" {
-			notifier = notify.NewSlackNotifier(conf.Notifications.Slack.WebhookURL)
-		}
+		var notifier notify.Notifier = notify.BuildNotifier(conf)
 
 		// Setup global signal handling
 		sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
