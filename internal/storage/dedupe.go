@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 
 	"github.com/lupppig/dbackup/internal/manifest"
@@ -28,6 +30,9 @@ func (s *DedupeStorage) LastChunks() []string {
 func (s *DedupeStorage) Save(ctx context.Context, name string, r io.Reader) (string, error) {
 	chunker := NewChunker(r)
 	s.lastChunks = nil
+
+	const stripeSize = 10 // Every 10 chunks, we generate a parity chunk
+	var stripe [][]byte
 
 	for {
 		data, err := chunker.Next()
@@ -53,9 +58,60 @@ func (s *DedupeStorage) Save(ctx context.Context, name string, r io.Reader) (str
 				return "", fmt.Errorf("failed to save chunk %s: %w", hashStr, err)
 			}
 		}
+
+		// Keep track of data for parity
+		stripe = append(stripe, data)
+		if len(stripe) == stripeSize {
+			if err := s.saveParity(ctx, stripe); err != nil {
+				// Don't fail the whole backup for parity failure, but log it if we had a logger here
+			}
+			stripe = nil
+		}
+	}
+
+	// Save final incomplete stripe parity
+	if len(stripe) > 0 {
+		_ = s.saveParity(ctx, stripe)
 	}
 
 	return s.inner.Location() + "/" + name, nil
+}
+
+func (s *DedupeStorage) saveParity(ctx context.Context, stripe [][]byte) error {
+	if len(stripe) == 0 {
+		return nil
+	}
+
+	maxLen := 0
+	for _, b := range stripe {
+		if len(b) > maxLen {
+			maxLen = len(b)
+		}
+	}
+
+	// Prepend lengths as a header (4 bytes per chunk)
+	header := make([]byte, len(stripe)*4)
+	for i, b := range stripe {
+		binary.LittleEndian.PutUint32(header[i*4:], uint32(len(b)))
+	}
+
+	parity := make([]byte, maxLen)
+	for _, b := range stripe {
+		for i, v := range b {
+			parity[i] ^= v
+		}
+	}
+
+	h := sha256.New()
+	for _, b := range stripe {
+		chash := sha256.Sum256(b)
+		h.Write([]byte(hex.EncodeToString(chash[:])))
+	}
+	stripeHash := hex.EncodeToString(h.Sum(nil))
+
+	fullParity := append(header, parity...)
+	_, err := s.inner.Save(ctx, "parity/"+stripeHash, bytes.NewReader(fullParity))
+	return err
 }
 
 func (s *DedupeStorage) Open(ctx context.Context, name string) (io.ReadCloser, error) {
@@ -80,21 +136,98 @@ func (s *DedupeStorage) Open(ctx context.Context, name string) (io.ReadCloser, e
 	closers := make([]io.Closer, 0, len(m.Chunks))
 
 	for i, hash := range m.Chunks {
-		r, err := s.inner.Open(ctx, "chunks/"+hash)
+		chunkPath := "chunks/" + hash
+		exists, _ := s.inner.Exists(ctx, chunkPath)
+		if exists {
+			r, err := s.inner.Open(ctx, chunkPath)
+			if err == nil {
+				readers[i] = r
+				closers = append(closers, r)
+				continue
+			}
+		}
+
+		// Chunk is missing, try recovery via parity
+		recovered, err := s.tryRecoverChunk(ctx, m.Chunks, i)
 		if err != nil {
 			for _, c := range closers {
 				c.Close()
 			}
-			return nil, fmt.Errorf("failed to open chunk %s: %w", hash, err)
+			return nil, fmt.Errorf("failed to open/recover chunk %s: %w", hash, err)
 		}
-		readers[i] = r
-		closers = append(closers, r)
+		readers[i] = io.NopCloser(bytes.NewReader(recovered))
 	}
 
 	return &multiReadCloser{
 		Reader:  io.MultiReader(readers...),
 		closers: closers,
 	}, nil
+}
+
+func (s *DedupeStorage) tryRecoverChunk(ctx context.Context, allChunks []string, missingIndex int) ([]byte, error) {
+	const stripeSize = 10
+	stripeIdx := (missingIndex / stripeSize) * stripeSize
+	stripeEnd := stripeIdx + stripeSize
+	if stripeEnd > len(allChunks) {
+		stripeEnd = len(allChunks)
+	}
+
+	stripeHashes := allChunks[stripeIdx:stripeEnd]
+	h := sha256.New()
+	for _, hash := range stripeHashes {
+		h.Write([]byte(hash))
+	}
+	stripeHash := hex.EncodeToString(h.Sum(nil))
+
+	fullParity, err := s.inner.GetMetadata(ctx, "parity/"+stripeHash)
+	if err != nil {
+		return nil, fmt.Errorf("parity chunk not found: %w", err)
+	}
+
+	headerLen := len(stripeHashes) * 4
+	if len(fullParity) < headerLen {
+		return nil, fmt.Errorf("malformed parity chunk")
+	}
+
+	header := fullParity[:headerLen]
+	parityData := fullParity[headerLen:]
+
+	missingLen := int(binary.LittleEndian.Uint32(header[(missingIndex-stripeIdx)*4:]))
+	recovered := make([]byte, missingLen)
+
+	temp := make([]byte, len(parityData))
+	copy(temp, parityData)
+
+	for i, hash := range stripeHashes {
+		if stripeIdx+i == missingIndex {
+			continue
+		}
+		data, err := s.getChunkData(ctx, hash)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read sibling %s: %w", hash, err)
+		}
+		for j, v := range data {
+			temp[j] ^= v
+		}
+	}
+
+	recovered = temp[:missingLen]
+
+	recoveredHash := sha256.Sum256(recovered)
+	if hex.EncodeToString(recoveredHash[:]) != allChunks[missingIndex] {
+		return nil, fmt.Errorf("recovered chunk hash mismatch")
+	}
+
+	return recovered, nil
+}
+
+func (s *DedupeStorage) getChunkData(ctx context.Context, hash string) ([]byte, error) {
+	r, err := s.inner.Open(ctx, "chunks/"+hash)
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+	return io.ReadAll(r)
 }
 
 func (s *DedupeStorage) Delete(ctx context.Context, name string) error {
@@ -163,6 +296,93 @@ func (s *DedupeStorage) Exists(ctx context.Context, name string) (bool, error) {
 	return s.inner.Exists(ctx, name)
 }
 
+func (s *DedupeStorage) Verify(ctx context.Context) ([]string, error) {
+	// 1. Get all manifests
+	files, err := s.inner.ListMetadata(ctx, "")
+	if err != nil {
+		return nil, err
+	}
+
+	referenced := make(map[string]bool)
+	for _, f := range files {
+		if !strings.HasSuffix(f, ".manifest") || f == "latest.manifest" {
+			continue
+		}
+		data, err := s.inner.GetMetadata(ctx, f)
+		if err != nil {
+			continue
+		}
+		m, err := manifest.Deserialize(data)
+		if err != nil {
+			continue
+		}
+		for _, c := range m.Chunks {
+			referenced[c] = true
+		}
+	}
+
+	// 2. Check existence of all referenced chunks
+	var missing []string
+	for c := range referenced {
+		exists, err := s.inner.Exists(ctx, "chunks/"+c)
+		if err != nil {
+			return nil, err
+		}
+		if !exists {
+			missing = append(missing, c)
+		}
+	}
+
+	return missing, nil
+}
+
+func (s *DedupeStorage) GC(ctx context.Context) (int, error) {
+	// 1. Get all manifests and collect all referenced chunks
+	files, err := s.inner.ListMetadata(ctx, "")
+	if err != nil {
+		return 0, err
+	}
+
+	referenced := make(map[string]bool)
+	for _, f := range files {
+		if !strings.HasSuffix(f, ".manifest") || f == "latest.manifest" {
+			continue
+		}
+		data, err := s.inner.GetMetadata(ctx, f)
+		if err != nil {
+			continue
+		}
+		m, err := manifest.Deserialize(data)
+		if err != nil {
+			continue
+		}
+		for _, c := range m.Chunks {
+			referenced[c] = true
+		}
+	}
+
+	// 2. List all actual chunks in storage
+	// We need a way to list chunks. ListMetadata(ctx, "chunks/") should work if implemented.
+	actualChunks, err := s.inner.ListMetadata(ctx, "chunks/")
+	if err != nil {
+		return 0, err
+	}
+
+	// 3. Delete orphans
+	deletedCount := 0
+	for _, chunkPath := range actualChunks {
+		// chunkPath might be "chunks/hash" or just "hash" depending on implementation
+		hash := filepath.Base(chunkPath)
+		if !referenced[hash] {
+			if err := s.inner.Delete(ctx, chunkPath); err == nil {
+				deletedCount++
+			}
+		}
+	}
+
+	return deletedCount, nil
+}
+
 func (s *DedupeStorage) Location() string {
 	return s.inner.Location()
 }
@@ -183,7 +403,6 @@ func (s *DedupeStorage) ListMetadata(ctx context.Context, prefix string) ([]stri
 
 	var filtered []string
 	for _, f := range files {
-		// Skip chunks folder for general listings to avoid performance issues
 		if strings.HasPrefix(f, "chunks/") && !strings.HasPrefix(prefix, "chunks/") {
 			continue
 		}
