@@ -170,6 +170,7 @@ func doBackup(cmd *cobra.Command, l *logger.Logger, connParams database.Connecti
 			KeepMonthly: keepMonthly,
 			KeepYearly:  keepYearly,
 		},
+		Audit:    Audit,
 		Logger:   l,
 		Notifier: notifier,
 	})

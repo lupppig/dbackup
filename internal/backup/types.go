@@ -20,6 +20,7 @@ type BackupOptions struct {
 	RemoteExec    bool // Force remote execution if storage is remote
 	AllowInsecure bool // Allow insecure protocols
 	Dedupe        bool // Enable storage-level deduplication (incremental)
+	Audit         bool // Enable tamper-evident audit logging
 
 	Retention       time.Duration
 	Keep            int

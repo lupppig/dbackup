@@ -36,6 +36,11 @@ func NewBackupManager(opts BackupOptions) (*BackupManager, error) {
 		s = storage.NewDedupeStorage(s)
 	}
 
+	// Wrap with audit storage for tamper-evident logging
+	if opts.Audit {
+		s = storage.NewAuditStorage(s)
+	}
+
 	return &BackupManager{
 		Options: opts,
 		storage: s,

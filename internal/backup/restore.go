@@ -39,6 +39,11 @@ func NewRestoreManager(opts BackupOptions) (*RestoreManager, error) {
 		s = storage.NewDedupeStorage(s)
 	}
 
+	// Wrap with audit storage if enabled
+	if opts.Audit {
+		s = storage.NewAuditStorage(s)
+	}
+
 	return &RestoreManager{
 		Options: opts,
 		storage: s,

@@ -87,6 +87,7 @@ var (
 
 	retention string
 	keep      int
+	Audit     bool
 )
 
 func init() {
@@ -103,6 +104,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&encryptionKeyFile, "encryption-key-file", "", "Path to the encryption key file")
 	rootCmd.PersistentFlags().StringVar(&encryptionPassphrase, "encryption-passphrase", "", "Passphrase for encryption key derivation")
 	rootCmd.PersistentFlags().BoolVar(&confirmRestore, "confirm-restore", false, "Confirm destructive restore operations")
+	rootCmd.PersistentFlags().BoolVar(&Audit, "audit", false, "Enable tamper-evident audit logging for storage operations")
 
 	// Core database flags
 	rootCmd.PersistentFlags().StringVarP(&dbType, "engine", "e", "", "database engine (postgres, mysql, sqlite)")

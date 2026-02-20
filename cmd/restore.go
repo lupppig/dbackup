@@ -307,6 +307,7 @@ func doRestore(cmd *cobra.Command, l *logger.Logger, connParams database.Connect
 		EncryptionPassphrase: encryptionPassphrase,
 		ConfirmRestore:       confirmRestore,
 		DryRun:               restoreDryRun,
+		Audit:                Audit,
 		Logger:               l,
 		Notifier:             notifier,
 	})
