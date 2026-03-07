@@ -3,6 +3,7 @@ import { useState } from 'react';
 
 function App() {
 	const [copiedInstall, setCopiedInstall] = useState(false);
+	const [activeTab, setActiveTab] = useState<'backup' | 'restore' | 'config'>('backup');
 	const [copiedRun, setCopiedRun] = useState(false);
 
 	const copyToClipboard = (text: string, setter: (val: boolean) => void) => {
@@ -120,44 +121,130 @@ function App() {
 						</ul>
 					</div>
 
-					<div className="relative group rounded-xl p-[1px] bg-gradient-to-b from-zinc-700/50 to-zinc-900/50 overflow-hidden shadow-2xl shadow-blue-900/10">
-						<div className="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity">
-							<button
-								onClick={() => copyToClipboard('dbackup backup postgres --db my_db --to s3://target', setCopiedRun)}
-								className="p-2 bg-zinc-800 hover:bg-zinc-700/80 rounded-md border border-zinc-700"
-							>
-								{copiedRun ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3 text-zinc-400" />}
-							</button>
-						</div>
+					<div className="relative group rounded-xl p-[1px] bg-gradient-to-b from-zinc-700/50 to-zinc-900/50 overflow-hidden shadow-2xl shadow-blue-900/10 flex flex-col h-full">
 
-						<div className="bg-[#0c0c0e] rounded-xl p-6 h-full font-mono text-sm leading-relaxed">
-							<div className="flex items-center gap-2 mb-4 border-b border-zinc-800 pb-4">
-								<div className="w-3 h-3 rounded-full bg-red-500/80"></div>
-								<div className="w-3 h-3 rounded-full bg-yellow-500/80"></div>
-								<div className="w-3 h-3 rounded-full bg-green-500/80"></div>
+						{/* Terminal Window Chrome */}
+						<div className="bg-[#0c0c0e] rounded-xl flex flex-col h-full font-mono text-sm leading-relaxed overflow-hidden">
+
+							{/* Terminal Header & Tabs */}
+							<div className="flex items-center justify-between border-b border-zinc-800 bg-[#0c0c0e] px-4 pt-3">
+								<div className="flex gap-2">
+									<button
+										onClick={() => setActiveTab('backup')}
+										className={`px-4 py-2 text-xs font-semibold rounded-t-lg transition-colors ${activeTab === 'backup' ? 'bg-zinc-800/80 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+									>
+										Backup
+									</button>
+									<button
+										onClick={() => setActiveTab('restore')}
+										className={`px-4 py-2 text-xs font-semibold rounded-t-lg transition-colors ${activeTab === 'restore' ? 'bg-zinc-800/80 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+									>
+										Restore
+									</button>
+									<button
+										onClick={() => setActiveTab('config')}
+										className={`px-4 py-2 text-xs font-semibold rounded-t-lg transition-colors ${activeTab === 'config' ? 'bg-zinc-800/80 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+									>
+										Cron Config
+									</button>
+								</div>
+
+								<div className="flex items-center gap-2 pb-2">
+									<div className="w-3 h-3 rounded-full bg-red-500/80 border border-red-500"></div>
+									<div className="w-3 h-3 rounded-full bg-yellow-500/80 border border-yellow-500"></div>
+									<div className="w-3 h-3 rounded-full bg-green-500/80 border border-green-500"></div>
+								</div>
 							</div>
 
-							<div className="text-zinc-400 mb-1">
-								<span className="text-indigo-400 font-bold">$</span> dbackup backup postgres \
-							</div>
-							<div className="text-zinc-400 mb-1 ml-4">
-								--db my_db \
-							</div>
-							<div className="text-zinc-400 mb-4 ml-4">
-								--to s3://key:secret@localhost:9000/backups
-							</div>
+							{/* Terminal Content Body */}
+							<div className="p-6 relative flex-grow">
+								<div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+									<button
+										onClick={() => {
+											const text = activeTab === 'backup' ? 'dbackup backup postgres --db my_db --to s3://target' :
+												activeTab === 'restore' ? 'dbackup restore mysql --from s3://backups/latest.manifest --to local_db' :
+													'dbackup dump --config ~/.dbackup/backup.yaml';
+											copyToClipboard(text, setCopiedRun);
+										}}
+										className="p-2 bg-zinc-800 hover:bg-zinc-700/80 rounded-md border border-zinc-700"
+									>
+										{copiedRun ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3 text-zinc-400" />}
+									</button>
+								</div>
 
-							<div className="text-emerald-400/90 mb-1 text-xs">
-								[INFO] Backup started engine=postgres database=my_db
-							</div>
-							<div className="text-zinc-500 mb-1 text-xs">
-								[INFO] Deduplication (CAS) active
-							</div>
-							<div className="text-zinc-500 mb-1 text-xs">
-								[INFO] Encrypting with AES-256-GCM...
-							</div>
-							<div className="text-blue-400/90 mt-2 text-xs font-semibold">
-								✔ Backup saved successfully (total execution: 742ms)
+								{activeTab === 'backup' && (
+									<div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+										<div className="text-zinc-400 mb-1">
+											<span className="text-indigo-400 font-bold">$</span> dbackup backup postgres \
+										</div>
+										<div className="text-zinc-400 mb-1 ml-4">
+											--db my_db \
+										</div>
+										<div className="text-zinc-400 mb-4 ml-4">
+											--to s3://key:secret@localhost:9000/backups
+										</div>
+
+										<div className="text-emerald-400/90 mb-1 text-xs">
+											[INFO] Backup started engine=postgres database=my_db
+										</div>
+										<div className="text-zinc-500 mb-1 text-xs">
+											[INFO] Deduplication (CAS) active
+										</div>
+										<div className="text-zinc-500 mb-1 text-xs">
+											[INFO] Encrypting with AES-256-GCM...
+										</div>
+										<div className="text-blue-400/90 mt-2 text-xs font-semibold">
+											✔ Backup saved successfully (total execution: 742ms)
+										</div>
+									</div>
+								)}
+
+								{activeTab === 'restore' && (
+									<div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+										<div className="text-zinc-400 mb-1">
+											<span className="text-indigo-400 font-bold">$</span> dbackup restore mysql \
+										</div>
+										<div className="text-zinc-400 mb-1 ml-4">
+											--from s3://bucket/latest.manifest \
+										</div>
+										<div className="text-zinc-400 mb-4 ml-4">
+											--to user:pass@localhost/dev_db --confirm-restore
+										</div>
+
+										<div className="text-emerald-400/90 mb-1 text-xs">
+											[INFO] Reading manifest from S3...
+										</div>
+										<div className="text-zinc-500 mb-1 text-xs">
+											[INFO] Decrypting payload blocks...
+										</div>
+										<div className="text-zinc-500 mb-1 text-xs">
+											[INFO] Applying 2,491 records to MySQL target...
+										</div>
+										<div className="text-blue-400/90 mt-2 text-xs font-semibold">
+											✔ Database restored successfully. Safe to start application.
+										</div>
+									</div>
+								)}
+
+								{activeTab === 'config' && (
+									<div className="animate-in fade-in slide-in-from-bottom-2 duration-300 overflow-x-auto text-xs">
+										<div className="text-zinc-400 mb-3">
+											<span className="text-indigo-400 font-bold">$</span> cat ~/.dbackup/backup.yaml
+										</div>
+										<pre className="text-zinc-300 font-mono leading-relaxed">
+											<span className="text-pink-400">parallelism:</span> <span className="text-orange-300">4</span>
+											<span className="text-pink-400">backups:</span>
+											<span className="text-zinc-500">-</span> <span className="text-pink-400">id:</span> <span className="text-green-300">"prod-db"</span>
+											<span className="text-pink-400">engine:</span> <span className="text-green-300">"postgres"</span>
+											<span className="text-pink-400">uri:</span> <span className="text-green-300">"postgres://user@localhost/prod"</span>
+											<span className="text-pink-400">to:</span> <span className="text-green-300">"s3://bucket/backups"</span>
+											<span className="text-pink-400">dedupe:</span> <span className="text-orange-300">true</span>
+											<span className="text-pink-400">encrypt:</span> <span className="text-orange-300">true</span>
+											<span className="text-pink-400">retention:</span> <span className="text-green-300">"30d"</span>
+											<span className="text-pink-400">schedule:</span> <span className="text-green-300">"0 2 * * *"</span> <span className="text-zinc-500"># Runs nightly at 2 AM</span>
+										</pre>
+									</div>
+								)}
 							</div>
 						</div>
 					</div>
