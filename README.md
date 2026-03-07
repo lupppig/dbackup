@@ -1,6 +1,10 @@
 # dbackup
 
+[![roadmap.sh](https://img.shields.io/badge/roadmap.sh-Database_Backup_Utility-blue)](https://roadmap.sh/projects/database-backup-utility)
+
 A high-performance, extensible database backup CLI with built-in **deduplication**, **encryption**, **scheduling**, and **multi-cloud** storage support.
+
+> Based on the [Database Backup Utility](https://roadmap.sh/projects/database-backup-utility) project from roadmap.sh.
 
 ---
 
@@ -41,12 +45,52 @@ A high-performance, extensible database backup CLI with built-in **deduplication
 ## Getting Started
 
 ### 1. Installation
+
+**Linux & macOS:**
+Using Go:
 ```bash
 go build -o dbackup .
 sudo mv dbackup /usr/local/bin/
 ```
+Or using Make:
+```bash
+make build
+# The executable will be in the bin/ directory
+```
 
-### 2. Check Environment
+**Windows (PowerShell):**
+Using Go:
+```powershell
+go build -o dbackup.exe .
+Move-Item -Path dbackup.exe -Destination "C:\Windows\System32\"  # Or any directory in your PATH
+```
+Or using Make (Requires a Make port like `mingw32-make` or WSL):
+```powershell
+make build
+# The executable will be in the bin/ directory
+```
+
+### 2. Running Locally
+
+**Linux & macOS:**
+```bash
+make run
+```
+Or run using Go:
+```bash
+go run main.go --help
+```
+
+**Windows (PowerShell):**
+```powershell
+make run # If Make is installed
+```
+Or run using Go:
+```powershell
+go run main.go --help
+```
+
+### 3. Check Environment
 ```bash
 # Check local binaries
 dbackup doctor
@@ -54,7 +98,6 @@ dbackup doctor
 # Check live target connectivity & permissions
 dbackup doctor --config backup.yaml
 ```
-
 ---
 
 ## Usage
