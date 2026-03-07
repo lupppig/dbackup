@@ -145,7 +145,7 @@ function App() {
 										onClick={() => setActiveTab('config')}
 										className={`px-4 py-2 text-xs font-semibold rounded-t-lg transition-colors ${activeTab === 'config' ? 'bg-zinc-800/80 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
 									>
-										Cron Config
+										Config
 									</button>
 								</div>
 
@@ -229,19 +229,24 @@ function App() {
 								{activeTab === 'config' && (
 									<div className="animate-in fade-in slide-in-from-bottom-2 duration-300 overflow-x-auto text-xs">
 										<div className="text-zinc-400 mb-3">
-											<span className="text-indigo-400 font-bold">$</span> cat ~/.dbackup/backup.yaml
+											<span className="text-indigo-400 font-bold">$</span> cat ~/.dbackup/backup.json
 										</div>
 										<pre className="text-zinc-300 font-mono leading-relaxed">
-											<span className="text-pink-400">parallelism:</span> <span className="text-orange-300">4</span>
-											<span className="text-pink-400">backups:</span>
-											<span className="text-zinc-500">-</span> <span className="text-pink-400">id:</span> <span className="text-green-300">"prod-db"</span>
-											<span className="text-pink-400">engine:</span> <span className="text-green-300">"postgres"</span>
-											<span className="text-pink-400">uri:</span> <span className="text-green-300">"postgres://user@localhost/prod"</span>
-											<span className="text-pink-400">to:</span> <span className="text-green-300">"s3://bucket/backups"</span>
-											<span className="text-pink-400">dedupe:</span> <span className="text-orange-300">true</span>
-											<span className="text-pink-400">encrypt:</span> <span className="text-orange-300">true</span>
-											<span className="text-pink-400">retention:</span> <span className="text-green-300">"30d"</span>
-											<span className="text-pink-400">schedule:</span> <span className="text-green-300">"0 2 * * *"</span> <span className="text-zinc-500"># Runs nightly at 2 AM</span>
+											<span className="text-zinc-500">&#123;</span><br />
+											&nbsp;&nbsp;<span className="text-pink-400">"parallelism"</span>: <span className="text-orange-300">4</span>,<br />
+											&nbsp;&nbsp;<span className="text-pink-400">"backups"</span>: <span className="text-zinc-500">[</span><br />
+											&nbsp;&nbsp;&nbsp;&nbsp;<span className="text-zinc-500">&#123;</span><br />
+											&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span className="text-pink-400">"id"</span>: <span className="text-green-300">"prod-db"</span>,<br />
+											&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span className="text-pink-400">"engine"</span>: <span className="text-green-300">"postgres"</span>,<br />
+											&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span className="text-pink-400">"uri"</span>: <span className="text-green-300">"postgres://user@localhost/prod"</span>,<br />
+											&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span className="text-pink-400">"to"</span>: <span className="text-green-300">"s3://bucket/backups"</span>,<br />
+											&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span className="text-pink-400">"dedupe"</span>: <span className="text-orange-300">true</span>,<br />
+											&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span className="text-pink-400">"encrypt"</span>: <span className="text-orange-300">true</span>,<br />
+											&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span className="text-pink-400">"retention"</span>: <span className="text-green-300">"30d"</span>,<br />
+											&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span className="text-pink-400">"schedule"</span>: <span className="text-green-300">"0 2 * * *"</span><br />
+											&nbsp;&nbsp;&nbsp;&nbsp;<span className="text-zinc-500">&#125;</span><br />
+											&nbsp;&nbsp;<span className="text-zinc-500">]</span><br />
+											<span className="text-zinc-500">&#125;</span>
 										</pre>
 									</div>
 								)}
@@ -272,16 +277,16 @@ function App() {
 							</div>
 						))}
 					</div>
-				</section>
+				</section >
 
-			</main>
+			</main >
 
 			<footer className="container mx-auto px-6 py-12 text-center border-t border-zinc-900 mt-24">
 				<p className="text-zinc-500 text-sm">
 					Built securely with Go. Open source forever.
 				</p>
 			</footer>
-		</div>
+		</div >
 	);
 }
 
