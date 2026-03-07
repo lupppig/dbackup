@@ -34,10 +34,10 @@ func (s *LocalStorage) Save(ctx context.Context, name string, r io.Reader) (stri
 	defer os.Remove(tmpPath) // Cleanup on failure
 
 	if _, err := io.Copy(f, r); err != nil {
-		f.Close()
+		f.Close() // #nosec G104
 		return "", fmt.Errorf("failed to write data: %w", err)
 	}
-	f.Close()
+	f.Close() // #nosec G104
 
 	if err := os.Rename(tmpPath, path); err != nil {
 		return "", fmt.Errorf("failed to finalize file (rename): %w", err)

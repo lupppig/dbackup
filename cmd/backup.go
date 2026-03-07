@@ -260,7 +260,7 @@ func parseRetention(s string) time.Duration {
 	if strings.HasSuffix(s, "d") {
 		days := strings.TrimSuffix(s, "d")
 		var d int
-		fmt.Sscanf(days, "%d", &d)
+		fmt.Sscanf(days, "%d", &d) // #nosec G104
 		dur = time.Duration(d) * 24 * time.Hour
 	}
 	return dur

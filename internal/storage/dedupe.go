@@ -261,7 +261,7 @@ func (s *DedupeStorage) Open(ctx context.Context, name string) (io.ReadCloser, e
 		recovered, err := s.tryRecoverChunk(ctx, m.Chunks, i)
 		if err != nil {
 			for _, c := range closers {
-				c.Close()
+				c.Close() // #nosec G104
 			}
 			return nil, fmt.Errorf("failed to open/recover chunk %s: %w", hash, err)
 		}

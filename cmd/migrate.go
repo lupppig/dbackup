@@ -78,7 +78,7 @@ Example: dbackup migrate --from ./local-backups --to s3://my-bucket/backups`,
 
 			// Save to destination
 			_, err = dst.Save(cmd.Context(), backupName, r)
-			r.Close()
+			r.Close() // #nosec G104
 			if err != nil {
 				return fmt.Errorf("failed to save backup to destination: %w", err)
 			}

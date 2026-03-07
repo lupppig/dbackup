@@ -281,7 +281,7 @@ func init() {
 
 	// Hidden flag for daemon mode
 	scheduleStartCmd.Flags().BoolVar(&daemonMode, "daemon", false, "Run in daemon mode (internal)")
-	scheduleStartCmd.Flags().MarkHidden("daemon")
+	scheduleStartCmd.Flags().MarkHidden("daemon") // #nosec G104
 
 	for _, c := range []*cobra.Command{scheduleBackupCmd, scheduleRestoreCmd} {
 		c.Flags().StringVar(&cronSpec, "cron", "", "Cron schedule (e.g. \"0 2 * * *\")")

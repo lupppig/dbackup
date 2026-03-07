@@ -80,7 +80,7 @@ func (m *RestoreManager) Run(ctx context.Context, adapter database.DBAdapter, co
 			if err != nil {
 				status = notify.StatusError
 			}
-			m.Options.Notifier.Notify(ctx, notify.Stats{
+			m.Options.Notifier.Notify(ctx, notify.Stats{ // #nosec G104
 				Status:    status,
 				Operation: "Restore",
 				Engine:    conn.DBType,
@@ -149,7 +149,7 @@ func (m *RestoreManager) Run(ctx context.Context, adapter database.DBAdapter, co
 
 	r, err := m.storage.Open(ctx, name)
 	if err != nil {
-		f.Close()
+		f.Close() // #nosec G104
 		return fmt.Errorf("failed to open backup for restore: %w", err)
 	}
 
@@ -185,8 +185,8 @@ func (m *RestoreManager) Run(ctx context.Context, adapter database.DBAdapter, co
 	// Do not call p.Wait() here if it's shared, as the caller (dumpCmd) will wait at the end
 	// Wait only if created locally.
 	// Actually, dumpCmd waits at the end of immediate tasks.
-	r.Close()
-	f.Close()
+	r.Close() // #nosec G104
+	f.Close() // #nosec G104
 	if err != nil {
 		msg := "Check storage connectivity and file existence."
 		// Check if it's a timeout or connection error

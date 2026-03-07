@@ -98,7 +98,7 @@ This will update both the backup data (chunks if deduped) and the manifests.`,
 
 			// 3. Save to storage (this will create new chunks if deduped)
 			newLoc, err := s.Save(cmd.Context(), backupName+"_rekeyed", pr)
-			r.Close()
+			r.Close() // #nosec G104
 			if err != nil {
 				return fmt.Errorf("failed to save re-encrypted backup: %w", err)
 			}

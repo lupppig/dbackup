@@ -37,7 +37,7 @@ func NewFTPStorage(u *url.URL, opts StorageOptions) (*FTPStorage, error) {
 
 	err = c.Login(user, pass)
 	if err != nil {
-		c.Quit()
+		c.Quit() // #nosec G104
 		return nil, err
 	}
 

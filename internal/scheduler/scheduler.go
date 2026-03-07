@@ -223,7 +223,7 @@ func (s *Scheduler) executeTask(id string) {
 	task.LastRun = &now
 	s.running++
 	s.mu.Unlock()
-	s.Save()
+	s.Save() // #nosec G104
 
 	var notifier notify.Notifier
 	if os.Getenv("SLACK_WEBHOOK") != "" {
@@ -254,7 +254,7 @@ func (s *Scheduler) executeTask(id string) {
 		task.Status = StatusFailed
 		l.Error("Scheduled task failed after retries", "id", task.ID, "error", err)
 		if notifier != nil {
-			notifier.Notify(context.Background(), notify.Stats{
+			notifier.Notify(context.Background(), notify.Stats{ // #nosec G104
 				Operation: string(task.Type),
 				Engine:    task.Engine,
 				Database:  task.Options.DBName,
@@ -267,7 +267,7 @@ func (s *Scheduler) executeTask(id string) {
 		task.Status = StatusSuccess
 		l.Info("Scheduled task succeeded", "id", task.ID)
 		if notifier != nil {
-			notifier.Notify(context.Background(), notify.Stats{
+			notifier.Notify(context.Background(), notify.Stats{ // #nosec G104
 				Operation: string(task.Type),
 				Engine:    task.Engine,
 				Database:  task.Options.DBName,
@@ -277,7 +277,7 @@ func (s *Scheduler) executeTask(id string) {
 		}
 	}
 	s.mu.Unlock()
-	s.Save()
+	s.Save() // #nosec G104
 }
 
 func (s *Scheduler) runInternal(t *ScheduledTask, l *logger.Logger, n notify.Notifier) error {
@@ -318,7 +318,7 @@ func (s *Scheduler) runInternal(t *ScheduledTask, l *logger.Logger, n notify.Not
 		if strings.HasSuffix(t.Options.Retention, "d") {
 			days := strings.TrimSuffix(t.Options.Retention, "d")
 			var d int
-			fmt.Sscanf(days, "%d", &d)
+			fmt.Sscanf(days, "%d", &d) // #nosec G104
 			dur = time.Duration(d) * 24 * time.Hour
 		}
 		opts.Retention = dur

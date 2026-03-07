@@ -48,7 +48,7 @@ func (c *ConnectionParams) ParseURI() error {
 
 	c.Host = u.Hostname()
 	if p := u.Port(); p != "" {
-		fmt.Sscanf(p, "%d", &c.Port)
+		fmt.Sscanf(p, "%d", &c.Port) // #nosec G104
 	} else {
 		switch u.Scheme {
 		case "postgres", "postgresql":

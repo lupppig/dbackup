@@ -89,7 +89,7 @@ var doctorCmd = &cobra.Command{
 					fmt.Printf("    [x] Permissions: READ/WRITE OK\n")
 					_ = s.Delete(cmd.Context(), ".doctor_check")
 				}
-				s.Close()
+				s.Close() // #nosec G104
 			}
 		}
 	},

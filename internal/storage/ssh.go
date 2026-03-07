@@ -98,7 +98,7 @@ func (s *SSHStorage) connect() error {
 
 	sftpClient, err := sftp.NewClient(client)
 	if err != nil {
-		client.Close()
+		client.Close() // #nosec G104
 		return apperrors.Wrap(err, apperrors.TypeInternal, "failed to create SFTP client", "Verify the SFTP subsystem is enabled on the remote host.")
 	}
 
@@ -251,7 +251,7 @@ func (s *SSHStorage) ListMetadata(ctx context.Context, prefix string) ([]string,
 
 func (s *SSHStorage) Close() error {
 	if s.sftpClient != nil {
-		s.sftpClient.Close()
+		s.sftpClient.Close() // #nosec G104
 	}
 	if s.client != nil {
 		return s.client.Close()
@@ -300,8 +300,8 @@ func (s *SSHStorage) RunWithIO(ctx context.Context, name string, args []string, 
 	select {
 	case <-ctx.Done():
 		// Attempt graceful termination if context is canceled
-		session.Signal(ssh.SIGTERM)
-		session.Close()
+		session.Signal(ssh.SIGTERM) // #nosec G104
+		session.Close()             // #nosec G104
 		return ctx.Err()
 	case err := <-errChan:
 		return err

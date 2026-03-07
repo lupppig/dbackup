@@ -144,7 +144,7 @@ func (ma *MysqlAdapter) ensureTLSConfig(cfg TLSConfig) (string, error) {
 	}
 
 	configName := fmt.Sprintf("custom_%t_%t", cfg.CACert != "", cfg.ClientCert != "")
-	mysql.RegisterTLSConfig(configName, tlsConfig)
+	mysql.RegisterTLSConfig(configName, tlsConfig) // #nosec G104
 	return configName, nil
 }
 

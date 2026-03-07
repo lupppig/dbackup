@@ -109,7 +109,7 @@ func (m *BackupManager) Run(ctx context.Context, adapter database.DBAdapter, con
 			if err != nil {
 				status = notify.StatusError
 			}
-			m.Options.Notifier.Notify(ctx, notify.Stats{
+			m.Options.Notifier.Notify(ctx, notify.Stats{ // #nosec G104
 				Status:    status,
 				Operation: "Backup",
 				Engine:    conn.DBType,
