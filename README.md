@@ -49,8 +49,7 @@ A high-performance, extensible database backup CLI with built-in **deduplication
 **Linux & macOS:**
 Using Go:
 ```bash
-go build -o dbackup .
-sudo mv dbackup /usr/local/bin/
+go install github.com/lupppig/dbackup@latest
 ```
 Or using Make:
 ```bash
@@ -61,8 +60,7 @@ make build
 **Windows (PowerShell):**
 Using Go:
 ```powershell
-go build -o dbackup.exe .
-Move-Item -Path dbackup.exe -Destination "C:\Windows\System32\"  # Or any directory in your PATH
+go install github.com/lupppig/dbackup@latest
 ```
 Or using Make (Requires a Make port like `mingw32-make` or WSL):
 ```powershell
