@@ -50,6 +50,7 @@ A high-performance, extensible database backup CLI with built-in **deduplication
 Using Go:
 ```bash
 go install github.com/lupppig/dbackup@latest
+
 ```
 Or using Make:
 ```bash
