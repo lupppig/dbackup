@@ -105,14 +105,14 @@ dbackup doctor --config backup.yaml
 ### Listing Backups
 Discover what's stored in your storage backend:
 ```bash
-dbackup backups --to sftp://user@host/backups
+dbackup backups --to user@host/backups
 
-dbackup backups --to local://./backups --db my_app_db
+dbackup backups --to ./backups --db my_app_db
 ```
 
 ### Backing Up
 ```bash
-dbackup backup postgres --db my_db --to s3://key:secret@localhost:9000/backups
+dbackup backup postgres --db my_db --to key:secret@localhost:9000/backups
 
 dbackup dump --config ~/.dbackup/backup.yaml
 ```
@@ -120,7 +120,7 @@ dbackup dump --config ~/.dbackup/backup.yaml
 ### Restoring
 `dbackup` makes restoration safe and intelligent:
 ```bash
-dbackup restore mysql --name latest.manifest --to mysql://user:pass@localhost/db --confirm-restore
+dbackup restore mysql --name latest.manifest --to user:pass@localhost/db --confirm-restore
 
 dbackup restore --auto --confirm-restore
 ```
@@ -128,7 +128,7 @@ dbackup restore --auto --confirm-restore
 ### Migration
 Move all backups from one backend to another:
 ```bash
-dbackup migrate --from ./local-backups --to s3://bucket/archive --dedupe
+dbackup migrate --from ./local-backups --to bucket/archive --dedupe
 ```
 
 ### Advanced Retention (GFS)
@@ -139,7 +139,7 @@ dbackup backup pg --db app --keep-daily 7 --keep-weekly 4 --keep-monthly 12
 ### Key Rotation
 Rotate your encryption secrets without losing history:
 ```bash
-dbackup rekey --old-pass secret1 --new-pass secret2 --target s3://bucket
+dbackup rekey --old-pass secret1 --new-pass secret2 --target bucket
 ```
 
 ### Audit Logging
