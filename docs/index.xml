@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Docs on dbackup</title><link>https://lupppig.github.io/dbackup/docs/</link><description>Recent content in Docs on dbackup</description><generator>Hugo</generator><language>en-us</language><atom:link href="https://lupppig.github.io/dbackup/docs/index.xml" rel="self" type="application/rss+xml"/><item><title>Advanced Usage</title><link>https://lupppig.github.io/dbackup/docs/advanced-usage/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://lupppig.github.io/dbackup/docs/advanced-usage/</guid><description>&lt;h1 id="advanced-usage"&gt;
+ Advanced Usage
+ &lt;a class="anchor" href="#advanced-usage"&gt;#&lt;/a&gt;
+&lt;/h1&gt;
+&lt;p&gt;&lt;code&gt;dbackup&lt;/code&gt; isn&amp;rsquo;t just a simple wrap around &lt;code&gt;pg_dump&lt;/code&gt;; it contains several enterprise-ready capabilities to help organize, verify, and secure your long-term storage strategy.&lt;/p&gt;
+&lt;h2 id="grandfather-father-son-gfs-retention"&gt;
+ Grandfather-Father-Son (GFS) Retention
+ &lt;a class="anchor" href="#grandfather-father-son-gfs-retention"&gt;#&lt;/a&gt;
+&lt;/h2&gt;
+&lt;p&gt;If you only use &lt;code&gt;--retention 30d&lt;/code&gt;, you&amp;rsquo;ll store 30 daily backups. However, for compliance reasons, you often need backups covering a wider span of months and years without paying the storage cost of 365+ daily backups. &lt;code&gt;dbackup&lt;/code&gt; completely natively implements GFS rules:&lt;/p&gt;</description></item></channel></rss>

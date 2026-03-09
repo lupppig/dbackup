@@ -1,0 +1,181 @@
+<!doctype html><html lang=en-us dir=ltr><head><meta charset=UTF-8><meta name=viewport content="width=device-width,initial-scale=1"><meta name=description content="
+  CLI Reference
+  #
+
+The dbackup Command Line Interface provides comprehensive tools for managing your database backups through various unified commands.
+
+  Global Flags
+  #
+
+All commands support the following global flags for common configuration and overrides:
+
+  
+      
+          Flag
+          Description
+          Default
+      
+  
+  
+      
+          --allow-insecure
+          Allow insecure protocols (like plain FTP).
+          false
+      
+      
+          --audit
+          Enable tamper-evident audit logging (audit.jsonl).
+          false
+      
+      
+          --config string
+          Path to your configuration file.
+          $HOME/.dbackup/backup.yaml
+      
+      
+          --confirm-restore
+          Confirm destructive restore operations.
+          false
+      
+      
+          -d, --db string
+          Database name or file path to target.
+          
+      
+      
+          --db-uri string
+          Full database connection URI (overrides individual components).
+          
+      
+      
+          --dedupe
+          Enable storage-level deduplication (CAS).
+          true
+      
+      
+          --encrypt
+          Enable client-side encryption (AES-256-GCM).
+          false
+      
+      
+          --encryption-key-file
+          Path to the encryption key file.
+          
+      
+      
+          --encryption-passphrase
+          Passphrase for encryption key derivation.
+          
+      
+      
+          -e, --engine string
+          Database engine (postgres, mysql, sqlite).
+          
+      
+      
+          --host string
+          Database host.
+          
+      
+      
+          --log-json
+          Output logs in JSON format instead of plain text.
+          false
+      
+      
+          --no-color
+          Disable colored terminal output.
+          false
+      
+      
+          --parallelism int
+          Number of databases/chunks to process simultaneously.
+          4
+      
+      
+          --password string
+          Database password.
+          
+      
+      
+          --port int
+          Database port.
+          
+      
+      
+          --remote-exec
+          Execute backup/restore tools on the remote storage host.
+          false
+      
+      
+          --slack-webhook string
+          Slack Incoming Webhook URL for notifications.
+          
+      
+      
+          --tls
+          Enable TLS/SSL for database connection.
+          false
+      
+      
+          --tls-ca-cert string
+          Path to CA certificate for TLS verification.
+          
+      
+      
+          --tls-client-cert
+          Path to client certificate for mutual TLS (mTLS).
+          
+      
+      
+          --tls-client-key string
+          Path to client private key for mutual TLS (mTLS).
+          
+      
+      
+          --tls-mode string
+          TLS mode (disable, require, verify-ca, verify-full).
+          disable
+      
+      
+          -t, --to string
+          Unified targeting URI (e.g. ./local/path, sftp://user@host/path).
+          
+      
+      
+          --user string
+          Database username.
+          
+      
+  
+
+
+
+  Commands
+  #
+
+
+  backup
+  #
+
+Runs a database backup and safely transfers it to the specified storage URI."><meta name=theme-color media="(prefers-color-scheme: light)" content="#ffffff"><meta name=theme-color media="(prefers-color-scheme: dark)" content="#343a40"><meta name=color-scheme content="light dark"><meta property="og:url" content="https://lupppig.github.io/dbackup/docs/user-guide/cli-reference/"><meta property="og:site_name" content="dbackup"><meta property="og:title" content="CLI Reference"><meta property="og:description" content="CLI Reference # The dbackup Command Line Interface provides comprehensive tools for managing your database backups through various unified commands.
+Global Flags # All commands support the following global flags for common configuration and overrides:
+Flag Description Default --allow-insecure Allow insecure protocols (like plain FTP). false --audit Enable tamper-evident audit logging (audit.jsonl). false --config string Path to your configuration file. $HOME/.dbackup/backup.yaml --confirm-restore Confirm destructive restore operations. false -d, --db string Database name or file path to target. --db-uri string Full database connection URI (overrides individual components). --dedupe Enable storage-level deduplication (CAS). true --encrypt Enable client-side encryption (AES-256-GCM). false --encryption-key-file Path to the encryption key file. --encryption-passphrase Passphrase for encryption key derivation. -e, --engine string Database engine (postgres, mysql, sqlite). --host string Database host. --log-json Output logs in JSON format instead of plain text. false --no-color Disable colored terminal output. false --parallelism int Number of databases/chunks to process simultaneously. 4 --password string Database password. --port int Database port. --remote-exec Execute backup/restore tools on the remote storage host. false --slack-webhook string Slack Incoming Webhook URL for notifications. --tls Enable TLS/SSL for database connection. false --tls-ca-cert string Path to CA certificate for TLS verification. --tls-client-cert Path to client certificate for mutual TLS (mTLS). --tls-client-key string Path to client private key for mutual TLS (mTLS). --tls-mode string TLS mode (disable, require, verify-ca, verify-full). disable -t, --to string Unified targeting URI (e.g. ./local/path, sftp://user@host/path). --user string Database username. Commands # backup # Runs a database backup and safely transfers it to the specified storage URI."><meta property="og:locale" content="en_us"><meta property="og:type" content="article"><meta property="article:section" content="docs"><title>CLI Reference | dbackup</title><link rel=icon href=/dbackup/favicon.png><link rel=manifest href=/dbackup/manifest.json><link rel=canonical href=https://lupppig.github.io/dbackup/docs/user-guide/cli-reference/><link rel=stylesheet href=/dbackup/book.min.f4bc2b0f80cbd784c51fa6123079c0ec4d90946148cb1cc5e0279ca61d81a19d.css integrity="sha256-9LwrD4DL14TFH6YSMHnA7E2QlGFIyxzF4Cecph2BoZ0=" crossorigin=anonymous><script defer src=/dbackup/fuse.min.js></script><script defer src=/dbackup/en.search.min.6adf5fc7392ddde5a220172363748df83c45fb375babb06ce84e9358d8098b73.js integrity="sha256-at9fxzkt3eWiIBcjY3SN+DxF+zdbq7Bs6E6TWNgJi3M=" crossorigin=anonymous></script></head><body dir=ltr><input type=checkbox class="hidden toggle" id=menu-control>
+<input type=checkbox class="hidden toggle" id=toc-control><main class="container flex"><aside class=book-menu><div class=book-menu-content><nav><h2 class=book-brand><a class="flex align-center" href=/dbackup/><img src=https://raw.githubusercontent.com/lupppig/dbackup/main/ui/public/dbackup.svg alt=Logo class=book-icon><span>dbackup</span></a></h2><div class="book-search hidden"><input type=text id=book-search-input placeholder=Search aria-label=Search maxlength=64 data-hotkeys=s/><div class="book-search-spinner hidden"></div><ul id=book-search-results></ul></div><script>document.querySelector(".book-search").classList.remove("hidden")</script><ul><li><span>Getting Started</span><ul><li><a href=/dbackup/docs/getting-started/installation/>Installation</a></li><li><a href=/dbackup/docs/getting-started/quickstart/>Quick Start</a></li></ul></li><li><span>User Guide</span><ul><li><a href=/dbackup/docs/user-guide/cli-reference/ class=active>CLI Reference</a></li><li><a href=/dbackup/docs/user-guide/configuration/>Configuration</a></li></ul></li><li><a href=/dbackup/docs/advanced-usage/>Advanced Usage</a></li></ul></nav><script>(function(){var e=document.querySelector("aside .book-menu-content");addEventListener("beforeunload",function(){localStorage.setItem("menu.scrollTop",e.scrollTop)}),e.scrollTop=localStorage.getItem("menu.scrollTop")})()</script></div></aside><div class=book-page><header class=book-header><div class="flex align-center justify-between"><label for=menu-control><img src=/dbackup/svg/menu.svg class=book-icon alt=Menu></label><h3>CLI Reference</h3><label for=toc-control><img src=/dbackup/svg/toc.svg class=book-icon alt="Table of Contents"></label></div><aside class="hidden clearfix"><nav id=TableOfContents><ul><li><a href=#global-flags>Global Flags</a></li><li><a href=#commands>Commands</a><ul><li><a href=#backup><code>backup</code></a></li><li><a href=#backups><code>backups</code></a></li><li><a href=#restore><code>restore</code></a></li><li><a href=#migrate><code>migrate</code></a></li><li><a href=#dump><code>dump</code></a></li><li><a href=#rekey><code>rekey</code></a></li><li><a href=#doctor><code>doctor</code></a></li></ul></li></ul></nav></aside></header><article class="markdown book-article"><h1 id=cli-reference>CLI Reference
+<a class=anchor href=#cli-reference>#</a></h1><p>The <code>dbackup</code> Command Line Interface provides comprehensive tools for managing your database backups through various unified commands.</p><h2 id=global-flags>Global Flags
+<a class=anchor href=#global-flags>#</a></h2><p>All commands support the following global flags for common configuration and overrides:</p><table><thead><tr><th>Flag</th><th>Description</th><th>Default</th></tr></thead><tbody><tr><td><code>--allow-insecure</code></td><td>Allow insecure protocols (like plain FTP).</td><td><code>false</code></td></tr><tr><td><code>--audit</code></td><td>Enable tamper-evident audit logging (<code>audit.jsonl</code>).</td><td><code>false</code></td></tr><tr><td><code>--config string</code></td><td>Path to your configuration file.</td><td><code>$HOME/.dbackup/backup.yaml</code></td></tr><tr><td><code>--confirm-restore</code></td><td>Confirm destructive restore operations.</td><td><code>false</code></td></tr><tr><td><code>-d, --db string</code></td><td>Database name or file path to target.</td><td></td></tr><tr><td><code>--db-uri string</code></td><td>Full database connection URI (overrides individual components).</td><td></td></tr><tr><td><code>--dedupe</code></td><td>Enable storage-level deduplication (CAS).</td><td><code>true</code></td></tr><tr><td><code>--encrypt</code></td><td>Enable client-side encryption (AES-256-GCM).</td><td><code>false</code></td></tr><tr><td><code>--encryption-key-file</code></td><td>Path to the encryption key file.</td><td></td></tr><tr><td><code>--encryption-passphrase</code></td><td>Passphrase for encryption key derivation.</td><td></td></tr><tr><td><code>-e, --engine string</code></td><td>Database engine (<code>postgres</code>, <code>mysql</code>, <code>sqlite</code>).</td><td></td></tr><tr><td><code>--host string</code></td><td>Database host.</td><td></td></tr><tr><td><code>--log-json</code></td><td>Output logs in JSON format instead of plain text.</td><td><code>false</code></td></tr><tr><td><code>--no-color</code></td><td>Disable colored terminal output.</td><td><code>false</code></td></tr><tr><td><code>--parallelism int</code></td><td>Number of databases/chunks to process simultaneously.</td><td><code>4</code></td></tr><tr><td><code>--password string</code></td><td>Database password.</td><td></td></tr><tr><td><code>--port int</code></td><td>Database port.</td><td></td></tr><tr><td><code>--remote-exec</code></td><td>Execute backup/restore tools on the remote storage host.</td><td><code>false</code></td></tr><tr><td><code>--slack-webhook string</code></td><td>Slack Incoming Webhook URL for notifications.</td><td></td></tr><tr><td><code>--tls</code></td><td>Enable TLS/SSL for database connection.</td><td><code>false</code></td></tr><tr><td><code>--tls-ca-cert string</code></td><td>Path to CA certificate for TLS verification.</td><td></td></tr><tr><td><code>--tls-client-cert</code></td><td>Path to client certificate for mutual TLS (mTLS).</td><td></td></tr><tr><td><code>--tls-client-key string</code></td><td>Path to client private key for mutual TLS (mTLS).</td><td></td></tr><tr><td><code>--tls-mode string</code></td><td>TLS mode (<code>disable</code>, <code>require</code>, <code>verify-ca</code>, <code>verify-full</code>).</td><td><code>disable</code></td></tr><tr><td><code>-t, --to string</code></td><td>Unified targeting URI (e.g. <code>./local/path</code>, <code>sftp://user@host/path</code>).</td><td></td></tr><tr><td><code>--user string</code></td><td>Database username.</td><td></td></tr></tbody></table><hr><h2 id=commands>Commands
+<a class=anchor href=#commands>#</a></h2><h3 id=backup><code>backup</code>
+<a class=anchor href=#backup>#</a></h3><p>Runs a database backup and safely transfers it to the specified storage URI.</p><p><strong>Usage:</strong> <code>dbackup backup [engine] [flags]</code></p><p><strong>Available <code>[engine]</code> values:</strong> <code>postgres</code>, <code>mysql</code>, <code>sqlite</code></p><p><strong>Specific Flags:</strong></p><ul><li><code>--compression-algo string</code>: Compression algorithm (<code>gzip</code>, <code>zstd</code>, <code>lz4</code>, <code>none</code>). Default: <code>lz4</code>.</li><li><code>--keep int</code>: Number of basic backups to keep.</li><li><code>--keep-daily int</code>: Number of daily backups to keep (GFS).</li><li><code>--keep-weekly int</code>: Number of weekly backups to keep (GFS).</li><li><code>--keep-monthly int</code>: Number of monthly backups to keep (GFS).</li><li><code>--keep-yearly int</code>: Number of yearly backups to keep (GFS).</li><li><code>--mysql-physical</code>: Use physical backup mode for MySQL instead of logical dumps. Default: <code>false</code>.</li><li><code>--name string</code>: Override the custom backup file/manifest name.</li><li><code>--retention string</code>: Retention period (e.g., <code>7d</code>, <code>24h</code>).</li></ul><p><strong>Example:</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>dbackup backup postgres --db my_db --to s3://my-bucket/backups --compression-algo zstd --keep-daily <span style=color:#ae81ff>7</span>
+</span></span></code></pre></div><h3 id=backups><code>backups</code>
+<a class=anchor href=#backups>#</a></h3><p>Lists all available backups at the specified storage target.</p><p><strong>Usage:</strong> <code>dbackup backups [flags]</code></p><p><strong>Specific Flags:</strong></p><ul><li><code>-f, --from string</code>: Unified source URI (alias for <code>--to</code> under this subcommand).</li></ul><p><strong>Example:</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>dbackup backups --to s3://my-bucket/backups --db my_db
+</span></span></code></pre></div><h3 id=restore><code>restore</code>
+<a class=anchor href=#restore>#</a></h3><p>Restores a specific backup manifest to your database.</p><p><strong>Usage:</strong> <code>dbackup restore [engine] [flags]</code></p><p><strong>Specific Flags:</strong></p><ul><li><code>-a, --auto</code>: Automatically restore the latest backup (used if no explicitly named manifest is specified).</li><li><code>--dry-run</code>: Simulation mode; don&rsquo;t actually run the restore process.</li><li><code>-f, --from string</code>: Unified source URI for the restore target.</li><li><code>--mysql-physical</code>: Assume physical format instead of logical for MySQL restores.</li><li><code>--name string</code>: Custom backup manifest file name to restore from.</li></ul><p><strong>Example:</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>dbackup restore mysql --auto --to mysql://user:pass@localhost/mydb --confirm-restore
+</span></span></code></pre></div><h3 id=migrate><code>migrate</code>
+<a class=anchor href=#migrate>#</a></h3><p>Migrate all backup datasets and manifests intact from one storage backend to another.</p><p><strong>Usage:</strong> <code>dbackup migrate [flags]</code></p><p><strong>Specific Flags:</strong></p><ul><li><code>--from string</code>: Source storage URI.</li><li><code>--to string</code>: Destination storage URI.</li><li><code>--dedupe</code>: Enable deduplication at destination. Default <code>true</code>.</li></ul><p><strong>Example:</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>dbackup migrate --from ./local-backups --to s3://my-bucket/backups
+</span></span></code></pre></div><h3 id=dump><code>dump</code>
+<a class=anchor href=#dump>#</a></h3><p>Reads the <code>backup.yaml</code> configuration file and executes all defined backup and restore tasks in a single go. Backups run in parallel, followed by sequential restores.</p><p><strong>Usage:</strong> <code>dbackup dump [flags]</code></p><p><strong>Example:</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>dbackup dump --config /etc/backup.yaml
+</span></span></code></pre></div><h3 id=rekey><code>rekey</code>
+<a class=anchor href=#rekey>#</a></h3><p>Decrypts existing backups using an old passphrase and re-encrypts them with a new one entirely.</p><p><strong>Usage:</strong> <code>dbackup rekey [flags]</code></p><p><strong>Specific Flags:</strong></p><ul><li><code>--target string</code>: Storage target URI. Default: <code>.</code>.</li><li><code>--old-pass string</code>: Current passphrase.</li><li><code>--new-pass string</code>: New passphrase.</li></ul><p><strong>Example:</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>dbackup rekey --target s3://my-bucket/backups --old-pass secret1 --new-pass supersecret2
+</span></span></code></pre></div><h3 id=doctor><code>doctor</code>
+<a class=anchor href=#doctor>#</a></h3><p>Verifies that all native tools required corresponding to each database engine (<code>pg_dump</code>, <code>mysqldump</code>, <code>sqlite3</code>, etc.) are present in your system <code>PATH</code>, and tests storage connections.</p><p><strong>Usage:</strong> <code>dbackup doctor [flags]</code></p><p><strong>Example:</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>dbackup doctor --config backup.yaml
+</span></span></code></pre></div></article><footer class=book-footer><div class="flex flex-wrap justify-between"></div><script>(function(){function e(e){const t=window.getSelection(),n=document.createRange();n.selectNodeContents(e),t.removeAllRanges(),t.addRange(n)}document.querySelectorAll("pre code").forEach(t=>{t.addEventListener("click",function(){if(window.getSelection().toString())return;e(t.parentElement),navigator.clipboard&&navigator.clipboard.writeText(t.parentElement.textContent)})})})()</script></footer><div class=book-comments></div><label for=menu-control class="hidden book-menu-overlay"></label></div><aside class=book-toc><div class=book-toc-content><nav id=TableOfContents><ul><li><a href=#global-flags>Global Flags</a></li><li><a href=#commands>Commands</a><ul><li><a href=#backup><code>backup</code></a></li><li><a href=#backups><code>backups</code></a></li><li><a href=#restore><code>restore</code></a></li><li><a href=#migrate><code>migrate</code></a></li><li><a href=#dump><code>dump</code></a></li><li><a href=#rekey><code>rekey</code></a></li><li><a href=#doctor><code>doctor</code></a></li></ul></li></ul></nav></div></aside></main></body></html>

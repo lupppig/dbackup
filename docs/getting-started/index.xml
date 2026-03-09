@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Getting Started on dbackup</title><link>https://lupppig.github.io/dbackup/docs/getting-started/</link><description>Recent content in Getting Started on dbackup</description><generator>Hugo</generator><language>en-us</language><atom:link href="https://lupppig.github.io/dbackup/docs/getting-started/index.xml" rel="self" type="application/rss+xml"/><item><title>Installation</title><link>https://lupppig.github.io/dbackup/docs/getting-started/installation/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://lupppig.github.io/dbackup/docs/getting-started/installation/</guid><description>&lt;h1 id="installation"&gt;
+ Installation
+ &lt;a class="anchor" href="#installation"&gt;#&lt;/a&gt;
+&lt;/h1&gt;
+&lt;p&gt;To get started with &lt;code&gt;dbackup&lt;/code&gt;, you need to install the CLI binary.&lt;/p&gt;
+&lt;h2 id="prerequisites"&gt;
+ Prerequisites
+ &lt;a class="anchor" href="#prerequisites"&gt;#&lt;/a&gt;
+&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="https://go.dev/doc/install"&gt;Go 1.22+&lt;/a&gt; (if building from source or installing via &lt;code&gt;go install&lt;/code&gt;)&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id="using-go-install"&gt;
+ Using Go Install
+ &lt;a class="anchor" href="#using-go-install"&gt;#&lt;/a&gt;
+&lt;/h2&gt;
+&lt;p&gt;The easiest way to install &lt;code&gt;dbackup&lt;/code&gt; globally is via &lt;code&gt;go install&lt;/code&gt;.&lt;/p&gt;
+&lt;div class="book-tabs"&gt;
+
+
+&lt;input type="radio" class="toggle" name="tabs-go-install" id="tabs-go-install-0" checked="checked" /&gt;
+&lt;label for="tabs-go-install-0"&gt;Linux / macOS&lt;/label&gt;
+&lt;div class="book-tabs-content markdown-inner"&gt;&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-bash" data-lang="bash"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;go install github.com/lupppig/dbackup@latest
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+
+
+&lt;input type="radio" class="toggle" name="tabs-go-install" id="tabs-go-install-1" /&gt;
+&lt;label for="tabs-go-install-1"&gt;Windows (PowerShell)&lt;/label&gt;
+&lt;div class="book-tabs-content markdown-inner"&gt;&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-powershell" data-lang="powershell"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;go install github.com/lupppig/dbackup@latest
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+
+&lt;/div&gt;
+
+&lt;p&gt;Make sure that your &lt;code&gt;$GOPATH/bin&lt;/code&gt; directory is in your system &lt;code&gt;PATH&lt;/code&gt;.&lt;/p&gt;</description></item><item><title>Quick Start</title><link>https://lupppig.github.io/dbackup/docs/getting-started/quickstart/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://lupppig.github.io/dbackup/docs/getting-started/quickstart/</guid><description>&lt;h1 id="quick-start"&gt;
+ Quick Start
+ &lt;a class="anchor" href="#quick-start"&gt;#&lt;/a&gt;
+&lt;/h1&gt;
+&lt;p&gt;Once you have installed &lt;code&gt;dbackup&lt;/code&gt;, you can easily start backing up and restoring your databases.&lt;/p&gt;
+&lt;h2 id="1-check-environment"&gt;
+ 1. Check Environment
+ &lt;a class="anchor" href="#1-check-environment"&gt;#&lt;/a&gt;
+&lt;/h2&gt;
+&lt;p&gt;Before running backups, it&amp;rsquo;s a good idea to verify that &lt;code&gt;dbackup&lt;/code&gt; recognizes the native database tools (like &lt;code&gt;pg_dump&lt;/code&gt;, &lt;code&gt;mysqldump&lt;/code&gt;, &lt;code&gt;sqlite3&lt;/code&gt;).&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-bash" data-lang="bash"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#75715e"&gt;# Check local binaries&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;dbackup doctor
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#75715e"&gt;# Check live target connectivity &amp;amp; permissions (if you have a config file)&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;dbackup doctor --config backup.yaml
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;h2 id="2-your-first-backup"&gt;
+ 2. Your First Backup
+ &lt;a class="anchor" href="#2-your-first-backup"&gt;#&lt;/a&gt;
+&lt;/h2&gt;
+&lt;p&gt;To back up a local database directly to a local directory:&lt;/p&gt;</description></item></channel></rss>
