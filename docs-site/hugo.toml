@@ -8,7 +8,7 @@ theme = 'hugo-book'
   BookToC = true
 
   # (Optional, default none) Set the path to a logo for the book.
-  BookLogo = 'https://raw.githubusercontent.com/lupppig/dbackup/main/ui/public/dbackup.svg'
+  BookLogo = 'dbackup.svg'
 
   # (Optional, default none) Set leaf bundle to render as side menu
   BookMenuBundle = '/menu'

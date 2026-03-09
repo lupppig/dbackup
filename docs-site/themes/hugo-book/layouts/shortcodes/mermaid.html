@@ -1,12 +1,15 @@
 {{ if not (.Page.Scratch.Get "mermaid") }}
 <!-- Include mermaid only first time -->
-<script src="{{ "mermaid.min.js" | relURL }}"></script>
-{{ with resources.Get "mermaid.json" }}
-  <script>mermaid.initialize({{ .Content | safeJS }})</script>
-{{ end }}
+<script type="module">
+	import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+	document.addEventListener("DOMContentLoaded", function () {
+		mermaid.initialize({ startOnLoad: true, theme: 'default' });
+		mermaid.run({ querySelector: '.mermaid' });
+	});
+</script>
 {{ .Page.Scratch.Set "mermaid" true }}
 {{ end }}
 
-<pre class="mermaid{{ with .Get "class" }} {{ . }}{{ end }}">
+<pre class="mermaid{{ with .Get " class" }} {{ . }}{{ end }}">
   {{- .Inner -}}
 </pre>
