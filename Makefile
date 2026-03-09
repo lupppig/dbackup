@@ -9,7 +9,7 @@ build-web:
 	@echo "Building React UI..."
 	cd ui && npm install && npm run build
 	@echo "Building Hugo Docs..."
-	cd docs-site && hugo
+	cd docs-site && hugo -b /docs/
 	@echo "Copying assets to embeddable web directory..."
 	mkdir -p web/ui web/docs
 	rm -rf web/ui/* web/docs/*
