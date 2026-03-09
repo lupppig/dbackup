@@ -5,13 +5,22 @@ BIN="bin"
 PG_CONTAINER="dbackup-postgres"
 PG_IMAGE="postgres:latest"
 
-build:
+build-web:
+	@echo "Building React UI..."
+	cd ui && npm install && npm run build
+	@echo "Building Hugo Docs..."
+	cd docs-site && hugo
+	@echo "Copying assets to embeddable web directory..."
+	mkdir -p web/ui web/docs
+	rm -rf web/ui/* web/docs/*
+	cp -r ui/dist/* web/ui/
+	cp -r docs-site/public/* web/docs/
+
+build: build-web
 	go build -o ./$(BIN)/$(COMPILED_FILE) main.go
 
 run: build
-	./$(BIN)/$(COMPILED_FILE)
-
-test:
+	./$(BIN)/$(COMPILED_FILE) ui
 	go test -timeout 60s -cover -race ./...
 
 check-deps:

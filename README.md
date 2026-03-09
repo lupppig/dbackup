@@ -101,6 +101,21 @@ dbackup doctor --config backup.yaml
 
 ## Usage
 
+### Interactive Dashboard & Documentation
+`dbackup` includes an embedded web server that hosts both a graphical React dashboard and the official Hugo documentation site.
+
+```bash
+# Starts the server on port 8080
+dbackup ui
+
+# Or specify a custom port
+dbackup ui --port 9000
+```
+- **Dashboard**: `http://localhost:8080/`
+- **Documentation**: `http://localhost:8080/docs/`
+
+> Note: To build the binary with the UI included from source, you must compile it using `make build`.
+
 ### Listing Backups
 Discover what's stored in your storage backend:
 ```bash

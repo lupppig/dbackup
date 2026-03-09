@@ -45,3 +45,12 @@ stress-test.sqlite3
 bin
 test_backups
 dummy_backups/stress-test-results.log
+
+# Build caching
+ui/node_modules/
+ui/dist/
+docs-site/public/
+web/ui/*
+!web/ui/.gitkeep
+web/docs/*
+!web/docs/.gitkeep
