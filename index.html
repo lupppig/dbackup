@@ -11,20 +11,70 @@ Based on the Database Backup Utility project from roadmap.sh.
   Architecture
   #
 
-    +-----------+       +------------------------+       +-------------------+
-    |  dbackup  | ----> | Backup/Restore Manager | ----> | Database Adapters |
-    |    CLI    |       +-----------+------------+       +---------+---------+
-    +-----------+                   |                              |
-                                    v                              v
-                        +-----------+------------+       +---------+----------+
-                        | Storage & Crypto Logic |       | Postgres, MySQL,   |
-                        +-----------+------------+       | SQLite             |
-                                    |                    +--------------------+
-                                    v
-                        +-----------+------------+
-                        | Local, SFTP, FTP, S3,  |
-                        | Docker Volumes         |
-                        +------------------------+
+
+
+
+
+
+
+
+flowchart TB
+    %% Core CLI
+    CLI(fa:fa-terminal dbackup CLI)
+
+    %% Managers
+    subgraph Core[Backup/Restore Manager]
+        direction TB
+        Sched(Scheduling & Setup)
+        Val(Integrity Validation)
+        Audit(Tamper-Evident Audit Log)
+    end
+    
+    %% Engine Connectors
+    subgraph Adapters[Database Adapters]
+        direction LR
+        PG[(PostgreSQL)]
+        My[(MySQL/MariaDB)]
+        SQ[(SQLite)]
+    end
+
+    %% Pipeline Logic
+    subgraph Pipe[Processing Pipeline]
+        direction TB
+        CAS(fa:fa-compress Chunking & Deduplication)
+        Crypto(fa:fa-lock AES-256-GCM Encryption)
+        Manifest(SHA-256 Manifest Generation)
+        CAS --> Crypto --> Manifest
+    end
+
+    %% Storage Backends
+    subgraph Storage[Multi-Cloud Storage Backends]
+        direction LR
+        S3(fa:fa-cloud S3 / MinIO)
+        SFTP(fa:fa-server SFTP / FTP)
+        Local(fa:fa-folder Local Disk)
+        Docker(fa:fa-docker Docker Volumes)
+    end
+
+    %% Connections
+    CLI ==>|Command / Config| Core
+    Core -->|1. Extract Stream| Adapters
+    Adapters -->|2. Raw Data Stream| Pipe
+    Pipe ==>|3. Encrypted Blocks & Manifests| Storage
+
+    %% Styling
+    classDef cli fill:#1f2937,color:#fff,stroke:#4b5563,stroke-width:2px,rx:8px,ry:8px;
+    classDef core fill:#2563eb,color:#fff,stroke:#1d4ed8,stroke-width:2px;
+    classDef adapter fill:#059669,color:#fff,stroke:#047857,stroke-width:2px;
+    classDef pipe fill:#7c3aed,color:#fff,stroke:#6d28d9,stroke-width:2px;
+    classDef storage fill:#db2777,color:#fff,stroke:#be185d,stroke-width:2px;
+    
+    class CLI cli;
+    class Sched,Val,Audit core;
+    class PG,My,SQ adapter;
+    class CAS,Crypto,Manifest pipe;
+    class S3,SFTP,Local,Docker storage;
+
 
   Features
   #
@@ -42,22 +92,71 @@ Key Rotation: Securely re-encrypt your entire history with a new passphrase.
 Live Diagnostics: Built-in latency and permission checks for all configured targets.
 "><meta name=theme-color media="(prefers-color-scheme: light)" content="#ffffff"><meta name=theme-color media="(prefers-color-scheme: dark)" content="#343a40"><meta name=color-scheme content="light dark"><meta property="og:url" content="https://lupppig.github.io/dbackup/"><meta property="og:site_name" content="dbackup"><meta property="og:title" content="Introduction"><meta property="og:description" content="dbackup # A high-performance, extensible database backup CLI with built-in deduplication, encryption, scheduling, and multi-cloud storage support.
 Based on the Database Backup Utility project from roadmap.sh.
-Architecture # +-----------+ +------------------------+ +-------------------+ | dbackup | ----> | Backup/Restore Manager | ----> | Database Adapters | | CLI | +-----------+------------+ +---------+---------+ +-----------+ | | v v +-----------+------------+ +---------+----------+ | Storage & Crypto Logic | | Postgres, MySQL, | +-----------+------------+ | SQLite | | +--------------------+ v +-----------+------------+ | Local, SFTP, FTP, S3, | | Docker Volumes | +------------------------+ Features # Multi-Database Support: Native integration with PostgreSQL (Logical & Physical), MySQL/MariaDB (Logical & Physical), and SQLite (Online). Content-Addressable Storage (Dedupe): Save massive amounts of space with parallel chunk hashing. Parallel Execution: Automatically scale your backup window with concurrent database operations and multi-threaded deduplication. Multi-Cloud Storage: Support for Local, SFTP, S3 (MinIO/AWS), FTP, and Docker. Advanced Retention (GFS): Grandfather-Father-Son rotation (Daily, Weekly, Monthly, Yearly). Storage Migration: Move your entire backup history between storage backends with a single command. Client-Side Encryption: AES-256-GCM authenticated encryption for maximum security. Tamper-Evident Audit Log: Optional cryptographic chaining for all storage operations. Key Rotation: Securely re-encrypt your entire history with a new passphrase. Live Diagnostics: Built-in latency and permission checks for all configured targets."><meta property="og:locale" content="en_us"><meta property="og:type" content="website"><title>Introduction | dbackup</title><link rel=icon href=/dbackup/favicon.png><link rel=manifest href=/dbackup/manifest.json><link rel=canonical href=https://lupppig.github.io/dbackup/><link rel=stylesheet href=/dbackup/book.min.f4bc2b0f80cbd784c51fa6123079c0ec4d90946148cb1cc5e0279ca61d81a19d.css integrity="sha256-9LwrD4DL14TFH6YSMHnA7E2QlGFIyxzF4Cecph2BoZ0=" crossorigin=anonymous><script defer src=/dbackup/fuse.min.js></script><script defer src=/dbackup/en.search.min.6adf5fc7392ddde5a220172363748df83c45fb375babb06ce84e9358d8098b73.js integrity="sha256-at9fxzkt3eWiIBcjY3SN+DxF+zdbq7Bs6E6TWNgJi3M=" crossorigin=anonymous></script><link rel=alternate type=application/rss+xml href=https://lupppig.github.io/dbackup/index.xml title=dbackup></head><body dir=ltr><input type=checkbox class="hidden toggle" id=menu-control>
-<input type=checkbox class="hidden toggle" id=toc-control><main class="container flex"><aside class=book-menu><div class=book-menu-content><nav><h2 class=book-brand><a class="flex align-center" href=/dbackup/><img src=https://raw.githubusercontent.com/lupppig/dbackup/main/ui/public/dbackup.svg alt=Logo class=book-icon><span>dbackup</span></a></h2><div class="book-search hidden"><input type=text id=book-search-input placeholder=Search aria-label=Search maxlength=64 data-hotkeys=s/><div class="book-search-spinner hidden"></div><ul id=book-search-results></ul></div><script>document.querySelector(".book-search").classList.remove("hidden")</script><ul><li><span>Getting Started</span><ul><li><a href=/dbackup/docs/getting-started/installation/>Installation</a></li><li><a href=/dbackup/docs/getting-started/quickstart/>Quick Start</a></li></ul></li><li><span>User Guide</span><ul><li><a href=/dbackup/docs/user-guide/cli-reference/>CLI Reference</a></li><li><a href=/dbackup/docs/user-guide/configuration/>Configuration</a></li></ul></li><li><a href=/dbackup/docs/advanced-usage/>Advanced Usage</a></li></ul></nav><script>(function(){var e=document.querySelector("aside .book-menu-content");addEventListener("beforeunload",function(){localStorage.setItem("menu.scrollTop",e.scrollTop)}),e.scrollTop=localStorage.getItem("menu.scrollTop")})()</script></div></aside><div class=book-page><header class=book-header><div class="flex align-center justify-between"><label for=menu-control><img src=/dbackup/svg/menu.svg class=book-icon alt=Menu></label><h3>Introduction</h3><label for=toc-control><img src=/dbackup/svg/toc.svg class=book-icon alt="Table of Contents"></label></div><aside class="hidden clearfix"><nav id=TableOfContents><ul><li><a href=#architecture>Architecture</a></li><li><a href=#features>Features</a></li></ul></nav></aside></header><article class="markdown book-article"><h1 id=dbackup>dbackup
+Architecture # flowchart TB %% Core CLI CLI(fa:fa-terminal dbackup CLI) %% Managers subgraph Core[Backup/Restore Manager] direction TB Sched(Scheduling & Setup) Val(Integrity Validation) Audit(Tamper-Evident Audit Log) end %% Engine Connectors subgraph Adapters[Database Adapters] direction LR PG[(PostgreSQL)] My[(MySQL/MariaDB)] SQ[(SQLite)] end %% Pipeline Logic subgraph Pipe[Processing Pipeline] direction TB CAS(fa:fa-compress Chunking & Deduplication) Crypto(fa:fa-lock AES-256-GCM Encryption) Manifest(SHA-256 Manifest Generation) CAS --> Crypto --> Manifest end %% Storage Backends subgraph Storage[Multi-Cloud Storage Backends] direction LR S3(fa:fa-cloud S3 / MinIO) SFTP(fa:fa-server SFTP / FTP) Local(fa:fa-folder Local Disk) Docker(fa:fa-docker Docker Volumes) end %% Connections CLI ==>|Command / Config| Core Core -->|1. Extract Stream| Adapters Adapters -->|2. Raw Data Stream| Pipe Pipe ==>|3. Encrypted Blocks & Manifests| Storage %% Styling classDef cli fill:#1f2937,color:#fff,stroke:#4b5563,stroke-width:2px,rx:8px,ry:8px; classDef core fill:#2563eb,color:#fff,stroke:#1d4ed8,stroke-width:2px; classDef adapter fill:#059669,color:#fff,stroke:#047857,stroke-width:2px; classDef pipe fill:#7c3aed,color:#fff,stroke:#6d28d9,stroke-width:2px; classDef storage fill:#db2777,color:#fff,stroke:#be185d,stroke-width:2px; class CLI cli; class Sched,Val,Audit core; class PG,My,SQ adapter; class CAS,Crypto,Manifest pipe; class S3,SFTP,Local,Docker storage; Features # Multi-Database Support: Native integration with PostgreSQL (Logical & Physical), MySQL/MariaDB (Logical & Physical), and SQLite (Online). Content-Addressable Storage (Dedupe): Save massive amounts of space with parallel chunk hashing. Parallel Execution: Automatically scale your backup window with concurrent database operations and multi-threaded deduplication. Multi-Cloud Storage: Support for Local, SFTP, S3 (MinIO/AWS), FTP, and Docker. Advanced Retention (GFS): Grandfather-Father-Son rotation (Daily, Weekly, Monthly, Yearly). Storage Migration: Move your entire backup history between storage backends with a single command. Client-Side Encryption: AES-256-GCM authenticated encryption for maximum security. Tamper-Evident Audit Log: Optional cryptographic chaining for all storage operations. Key Rotation: Securely re-encrypt your entire history with a new passphrase. Live Diagnostics: Built-in latency and permission checks for all configured targets."><meta property="og:locale" content="en_us"><meta property="og:type" content="website"><title>Introduction | dbackup</title><link rel=icon href=/dbackup/favicon.png><link rel=manifest href=/dbackup/manifest.json><link rel=canonical href=https://lupppig.github.io/dbackup/><link rel=stylesheet href=/dbackup/book.min.f4bc2b0f80cbd784c51fa6123079c0ec4d90946148cb1cc5e0279ca61d81a19d.css integrity="sha256-9LwrD4DL14TFH6YSMHnA7E2QlGFIyxzF4Cecph2BoZ0=" crossorigin=anonymous><script defer src=/dbackup/fuse.min.js></script><script defer src=/dbackup/en.search.min.6adf5fc7392ddde5a220172363748df83c45fb375babb06ce84e9358d8098b73.js integrity="sha256-at9fxzkt3eWiIBcjY3SN+DxF+zdbq7Bs6E6TWNgJi3M=" crossorigin=anonymous></script><link rel=alternate type=application/rss+xml href=https://lupppig.github.io/dbackup/index.xml title=dbackup></head><body dir=ltr><input type=checkbox class="hidden toggle" id=menu-control>
+<input type=checkbox class="hidden toggle" id=toc-control><main class="container flex"><aside class=book-menu><div class=book-menu-content><nav><h2 class=book-brand><a class="flex align-center" href=/dbackup/><img src=/dbackup/dbackup.svg alt=Logo class=book-icon><span>dbackup</span></a></h2><div class="book-search hidden"><input type=text id=book-search-input placeholder=Search aria-label=Search maxlength=64 data-hotkeys=s/><div class="book-search-spinner hidden"></div><ul id=book-search-results></ul></div><script>document.querySelector(".book-search").classList.remove("hidden")</script><ul><li><span>Getting Started</span><ul><li><a href=/dbackup/docs/getting-started/installation/>Installation</a></li><li><a href=/dbackup/docs/getting-started/quickstart/>Quick Start</a></li></ul></li><li><span>User Guide</span><ul><li><a href=/dbackup/docs/user-guide/cli-reference/>CLI Reference</a></li><li><a href=/dbackup/docs/user-guide/configuration/>Configuration</a></li></ul></li><li><a href=/dbackup/docs/advanced-usage/>Advanced Usage</a></li></ul></nav><script>(function(){var e=document.querySelector("aside .book-menu-content");addEventListener("beforeunload",function(){localStorage.setItem("menu.scrollTop",e.scrollTop)}),e.scrollTop=localStorage.getItem("menu.scrollTop")})()</script></div></aside><div class=book-page><header class=book-header><div class="flex align-center justify-between"><label for=menu-control><img src=/dbackup/svg/menu.svg class=book-icon alt=Menu></label><h3>Introduction</h3><label for=toc-control><img src=/dbackup/svg/toc.svg class=book-icon alt="Table of Contents"></label></div><aside class="hidden clearfix"><nav id=TableOfContents><ul><li><a href=#architecture>Architecture</a></li><li><a href=#features>Features</a></li></ul></nav></aside></header><article class="markdown book-article"><h1 id=dbackup>dbackup
 <a class=anchor href=#dbackup>#</a></h1><p><a href=https://roadmap.sh/projects/database-backup-utility><img src=https://img.shields.io/badge/roadmap.sh-Database_Backup_Utility-blue alt=roadmap.sh></a></p><p>A high-performance, extensible database backup CLI with built-in <strong>deduplication</strong>, <strong>encryption</strong>, <strong>scheduling</strong>, and <strong>multi-cloud</strong> storage support.</p><blockquote><p>Based on the <a href=https://roadmap.sh/projects/database-backup-utility>Database Backup Utility</a> project from roadmap.sh.</p></blockquote><h2 id=architecture>Architecture
-<a class=anchor href=#architecture>#</a></h2><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>    +-----------+       +------------------------+       +-------------------+
-</span></span><span style=display:flex><span>    |  dbackup  | ----&gt; | Backup/Restore Manager | ----&gt; | Database Adapters |
-</span></span><span style=display:flex><span>    |    CLI    |       +-----------+------------+       +---------+---------+
-</span></span><span style=display:flex><span>    +-----------+                   |                              |
-</span></span><span style=display:flex><span>                                    v                              v
-</span></span><span style=display:flex><span>                        +-----------+------------+       +---------+----------+
-</span></span><span style=display:flex><span>                        | Storage &amp; Crypto Logic |       | Postgres, MySQL,   |
-</span></span><span style=display:flex><span>                        +-----------+------------+       | SQLite             |
-</span></span><span style=display:flex><span>                                    |                    +--------------------+
-</span></span><span style=display:flex><span>                                    v
-</span></span><span style=display:flex><span>                        +-----------+------------+
-</span></span><span style=display:flex><span>                        | Local, SFTP, FTP, S3,  |
-</span></span><span style=display:flex><span>                        | Docker Volumes         |
-</span></span><span style=display:flex><span>                        +------------------------+
-</span></span></code></pre></div><h2 id=features>Features
+<a class=anchor href=#architecture>#</a></h2><script type=module>
+	import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+	document.addEventListener("DOMContentLoaded", function () {
+		mermaid.initialize({ startOnLoad: true, theme: 'default' });
+		mermaid.run({ querySelector: '.mermaid' });
+	});
+</script><pre class=mermaid>
+flowchart TB
+    %% Core CLI
+    CLI(fa:fa-terminal dbackup CLI)
+
+    %% Managers
+    subgraph Core[Backup/Restore Manager]
+        direction TB
+        Sched(Scheduling & Setup)
+        Val(Integrity Validation)
+        Audit(Tamper-Evident Audit Log)
+    end
+    
+    %% Engine Connectors
+    subgraph Adapters[Database Adapters]
+        direction LR
+        PG[(PostgreSQL)]
+        My[(MySQL/MariaDB)]
+        SQ[(SQLite)]
+    end
+
+    %% Pipeline Logic
+    subgraph Pipe[Processing Pipeline]
+        direction TB
+        CAS(fa:fa-compress Chunking & Deduplication)
+        Crypto(fa:fa-lock AES-256-GCM Encryption)
+        Manifest(SHA-256 Manifest Generation)
+        CAS --> Crypto --> Manifest
+    end
+
+    %% Storage Backends
+    subgraph Storage[Multi-Cloud Storage Backends]
+        direction LR
+        S3(fa:fa-cloud S3 / MinIO)
+        SFTP(fa:fa-server SFTP / FTP)
+        Local(fa:fa-folder Local Disk)
+        Docker(fa:fa-docker Docker Volumes)
+    end
+
+    %% Connections
+    CLI ==>|Command / Config| Core
+    Core -->|1. Extract Stream| Adapters
+    Adapters -->|2. Raw Data Stream| Pipe
+    Pipe ==>|3. Encrypted Blocks & Manifests| Storage
+
+    %% Styling
+    classDef cli fill:#1f2937,color:#fff,stroke:#4b5563,stroke-width:2px,rx:8px,ry:8px;
+    classDef core fill:#2563eb,color:#fff,stroke:#1d4ed8,stroke-width:2px;
+    classDef adapter fill:#059669,color:#fff,stroke:#047857,stroke-width:2px;
+    classDef pipe fill:#7c3aed,color:#fff,stroke:#6d28d9,stroke-width:2px;
+    classDef storage fill:#db2777,color:#fff,stroke:#be185d,stroke-width:2px;
+    
+    class CLI cli;
+    class Sched,Val,Audit core;
+    class PG,My,SQ adapter;
+    class CAS,Crypto,Manifest pipe;
+    class S3,SFTP,Local,Docker storage;
+</pre><h2 id=features>Features
 <a class=anchor href=#features>#</a></h2><ul><li><strong>Multi-Database Support</strong>: Native integration with PostgreSQL (Logical & Physical), MySQL/MariaDB (Logical & Physical), and SQLite (Online).</li><li><strong>Content-Addressable Storage (Dedupe)</strong>: Save massive amounts of space with parallel chunk hashing.</li><li><strong>Parallel Execution</strong>: Automatically scale your backup window with concurrent database operations and multi-threaded deduplication.</li><li><strong>Multi-Cloud Storage</strong>: Support for Local, SFTP, S3 (MinIO/AWS), FTP, and Docker.</li><li><strong>Advanced Retention (GFS)</strong>: Grandfather-Father-Son rotation (Daily, Weekly, Monthly, Yearly).</li><li><strong>Storage Migration</strong>: Move your entire backup history between storage backends with a single command.</li><li><strong>Client-Side Encryption</strong>: AES-256-GCM authenticated encryption for maximum security.</li><li><strong>Tamper-Evident Audit Log</strong>: Optional cryptographic chaining for all storage operations.</li><li><strong>Key Rotation</strong>: Securely re-encrypt your entire history with a new passphrase.</li><li><strong>Live Diagnostics</strong>: Built-in latency and permission checks for all configured targets.</li></ul></article><footer class=book-footer><div class="flex flex-wrap justify-between"></div><script>(function(){function e(e){const t=window.getSelection(),n=document.createRange();n.selectNodeContents(e),t.removeAllRanges(),t.addRange(n)}document.querySelectorAll("pre code").forEach(t=>{t.addEventListener("click",function(){if(window.getSelection().toString())return;e(t.parentElement),navigator.clipboard&&navigator.clipboard.writeText(t.parentElement.textContent)})})})()</script></footer><div class=book-comments></div><label for=menu-control class="hidden book-menu-overlay"></label></div><aside class=book-toc><div class=book-toc-content><nav id=TableOfContents><ul><li><a href=#architecture>Architecture</a></li><li><a href=#features>Features</a></li></ul></nav></div></aside></main></body></html>
